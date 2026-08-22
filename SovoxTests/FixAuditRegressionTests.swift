@@ -363,3 +363,40 @@ final class MeasuredDurationTests: XCTestCase {
         XCTAssertFalse(s.applyMeasuredDuration(index: 9, seconds: 600))
     }
 }
+
+/// Stop must not leave the screen on Transcribing when there is nothing left to
+/// transcribe and therefore no drain callback coming.
+final class TranscriptionWorkTests: XCTestCase {
+
+    private func session(_ states: [SegmentState]) -> RecordingSession {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.segments = states.enumerated().map { index, state in
+            SegmentRecord(index: index + 1,
+                          fileName: RecordingPaths.segmentFileName(index + 1),
+                          duration: 60,
+                          state: state,
+                          text: state == .done ? "text" : "")
+        }
+        return s
+    }
+
+    func testAFullyTranscribedSessionNeedsNothing() {
+        XCTAssertFalse(session([.done, .done]).needsTranscriptionWork)
+    }
+
+    func testAFailedSegmentIsStillWork() {
+        XCTAssertTrue(session([.done, .failed(reason: "x")]).needsTranscriptionWork,
+                      "a failure is terminal but retryable")
+    }
+
+    func testAnythingUnfinishedIsWork() {
+        XCTAssertTrue(session([.done, .pending]).needsTranscriptionWork)
+        XCTAssertTrue(session([.running]).needsTranscriptionWork)
+        XCTAssertTrue(session([.deferred(reason: "hot")]).needsTranscriptionWork)
+    }
+
+    func testAnEmptySessionNeedsNothing() {
+        XCTAssertFalse(RecordingSession(id: "s", startDate: Date()).needsTranscriptionWork)
+    }
+}

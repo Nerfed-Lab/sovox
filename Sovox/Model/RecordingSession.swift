@@ -110,6 +110,14 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
 
     var hasAudio: Bool { source == .recorded && !audioRemoved && !segments.isEmpty }
 
+    /// Whether anything is still worth handing to the transcriber: something
+    /// unfinished, or something that failed and can be retried. False means the
+    /// queue will never call back for this session, so nothing else may wait on
+    /// a drain that is not coming.
+    var needsTranscriptionWork: Bool {
+        segments.contains { !$0.state.isTerminal || $0.state.isFailure }
+    }
+
     /// Fills in a duration the app never had, for a segment adopted from disk
     /// after a force quit. Only ever writes over a zero: the engine's own figure
     /// is authoritative for anything it actually timed. Returns false when

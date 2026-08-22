@@ -198,7 +198,14 @@ final class RecorderController: SovoxCommandHandler {
         if let closing {
             enqueueTranscription(sessionID: session.id, index: closing.index, duration: closing.duration)
         }
-        enqueuePendingSegments(sessionID: session.id)
+        let queued = enqueuePendingSegments(sessionID: session.id)
+        // Everything can already be done by the time Stop is pressed, for
+        // example when an interruption closed the last segment and it finished
+        // while the user was still paused. Nothing would then drain the queue,
+        // and the screen would sit on Transcribing with no way out.
+        if closing == nil, !queued {
+            finishTranscription(sessionID: session.id)
+        }
         return true
     }
 
@@ -370,8 +377,11 @@ final class RecorderController: SovoxCommandHandler {
         Task { await TranscriptionService.shared.enqueue(job) }
     }
 
-    private func enqueueSegments(of sessionID: String, where include: @escaping (SegmentRecord) -> Bool) {
-        guard let session = store.session(id: sessionID) else { return }
+    /// Returns whether anything was actually queued. The caller needs to know:
+    /// a queue that was never given work never drains, and never calls back.
+    @discardableResult
+    private func enqueueSegments(of sessionID: String, where include: @escaping (SegmentRecord) -> Bool) -> Bool {
+        guard let session = store.session(id: sessionID) else { return false }
         let jobs = session.segments.filter(include).map { record in
             TranscriptionService.Job(sessionID: sessionID,
                                      index: record.index,
@@ -379,11 +389,13 @@ final class RecorderController: SovoxCommandHandler {
                                      expectedDuration: record.duration,
                                      localeIdentifier: TranscriptionLocale.resolved(session.localeIdentifier))
         }
-        guard !jobs.isEmpty else { return }
+        guard !jobs.isEmpty else { return false }
         Task { await TranscriptionService.shared.enqueue(jobs) }
+        return true
     }
 
-    private func enqueuePendingSegments(sessionID: String) {
+    @discardableResult
+    private func enqueuePendingSegments(sessionID: String) -> Bool {
         enqueueSegments(of: sessionID) { !$0.state.isTerminal || $0.state.isFailure }
     }
 

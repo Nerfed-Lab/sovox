@@ -146,6 +146,14 @@ there and reports it back. `applyMeasuredDuration` only ever writes over a zero,
 and never shortens a recorded session's own figure, which comes from the elapsed
 clock and legitimately includes paused time.
 
+**Stop could park the app on the Transcribing screen forever.** The state moved
+to transcribing whenever a session had segments, but the way back to ready comes
+only from the queue draining. If every segment was already terminal and the
+engine had no open segment to close, which happens when an interruption closed
+the last one and it finished while the user was still paused, nothing was queued
+and no drain callback was ever coming. `enqueueSegments` reports whether it
+queued anything now, and Stop finishes the session directly when it did not.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
