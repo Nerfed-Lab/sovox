@@ -97,6 +97,34 @@ enum SovoxURL {
         static let done = "done"
         static let failed = "failed"
     }
+
+    enum Route: Equatable {
+        case collectResult
+        case reportFailure
+        case openRecording
+        case ignore
+    }
+
+    /// Routing decision for an incoming URL, kept out of the App struct so it
+    /// can be tested.
+    ///
+    /// Case is normalised because a scheme or host typed by hand into a
+    /// Shortcut is not guaranteed to arrive lowercased, and a callback that
+    /// silently does nothing is the worst failure this app has: the user waits
+    /// for a result that is already sitting in the file.
+    ///
+    /// An unrecognised host while a request is in flight is still treated as the
+    /// success callback. Nothing else opens this scheme, the bridge is the only
+    /// caller, and the alternative is an indefinite wait on a mistyped host.
+    static func route(for url: URL, isInFlight: Bool) -> Route {
+        guard url.scheme?.lowercased() == scheme else { return .ignore }
+        switch url.host?.lowercased() {
+        case Host.done: return .collectResult
+        case Host.failed: return .reportFailure
+        case Host.recording: return .openRecording
+        default: return isInFlight ? .collectResult : .ignore
+        }
+    }
 }
 
 enum SovoxLiveActivity {

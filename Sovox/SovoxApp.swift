@@ -55,17 +55,16 @@ struct SovoxApp: App {
     }
 
     private func handle(_ url: URL) {
-        guard url.scheme == SovoxURL.scheme else { return }
-        switch url.host {
-        case SovoxURL.Host.done:
+        switch SovoxURL.route(for: url, isInFlight: handoff.isInFlight) {
+        case .collectResult:
             tab = .record
             Task { await handoff.collectResult(settings: settings, store: store) }
-        case SovoxURL.Host.failed:
+        case .reportFailure:
             tab = .record
             handoff.handleFailure()
-        case SovoxURL.Host.recording:
+        case .openRecording:
             tab = .record
-        default:
+        case .ignore:
             break
         }
     }

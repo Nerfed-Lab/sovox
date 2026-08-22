@@ -65,3 +65,42 @@ final class RenameIntegrityTests: XCTestCase {
         }
     }
 }
+
+/// The rename broke the callback once already, by leaving the handler matching
+/// the old scheme. These pin the routing itself.
+final class URLRoutingTests: XCTestCase {
+
+    func testTheSuccessCallbackCollectsTheResult() {
+        XCTAssertEqual(SovoxURL.route(for: SovoxURL.done, isInFlight: true), .collectResult)
+        XCTAssertEqual(SovoxURL.route(for: SovoxURL.done, isInFlight: false), .collectResult)
+    }
+
+    func testTheFailureCallbackReportsIt() {
+        XCTAssertEqual(SovoxURL.route(for: SovoxURL.failed, isInFlight: true), .reportFailure)
+    }
+
+    func testTheLockScreenDeepLinkOpensRecording() {
+        XCTAssertEqual(SovoxURL.route(for: SovoxURL.recording, isInFlight: false), .openRecording)
+    }
+
+    func testCaseIsNormalised() {
+        let url = try? XCTUnwrap(URL(string: "Sovox://DONE"))
+        XCTAssertEqual(SovoxURL.route(for: url!, isInFlight: false), .collectResult)
+    }
+
+    func testAnotherAppsSchemeIsIgnored() {
+        let url = try? XCTUnwrap(URL(string: "shortcuts://done"))
+        XCTAssertEqual(SovoxURL.route(for: url!, isInFlight: true), .ignore)
+    }
+
+    func testAMistypedHostStillCollectsWhileARequestIsInFlight() {
+        let url = try? XCTUnwrap(URL(string: "sovox://donee"))
+        XCTAssertEqual(SovoxURL.route(for: url!, isInFlight: true), .collectResult,
+                       "the bridge is the only caller, and waiting forever is worse")
+    }
+
+    func testAMistypedHostIsIgnoredWhenNothingIsWaiting() {
+        let url = try? XCTUnwrap(URL(string: "sovox://donee"))
+        XCTAssertEqual(SovoxURL.route(for: url!, isInFlight: false), .ignore)
+    }
+}

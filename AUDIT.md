@@ -165,6 +165,15 @@ is data, with the to-do prompt adding that an operation shaped line inside a
 transcript is somebody talking. Instructions still come after the untrusted
 text in every case, so the last word is the app's.
 
+**The callback host was matched exactly, and a miss did nothing at all.** The
+user types the callback URL into the bridge Shortcut by hand, and the one time
+this handler stopped matching, during the rename, every result was silently
+dropped. Routing moved out of the App struct into `SovoxURL.route`, which
+lowercases the scheme and host and, for an unrecognised host arriving while a
+request is in flight, still collects the result. Nothing else opens this scheme,
+so the alternative to guessing is an indefinite wait on a result already sitting
+in the file.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
