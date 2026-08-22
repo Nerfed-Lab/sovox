@@ -170,3 +170,22 @@ enum TodoPromptBuilder {
         """
     }
 }
+
+extension TodoItem {
+    /// The recording a to-do came from.
+    ///
+    /// The id is authoritative. To-dos written before the id was recorded carry
+    /// only a title, so fall back to matching on it, but only when there is no
+    /// id at all and only when exactly one recording matches. An id that is set
+    /// and does not resolve means the recording was deleted, and rebinding by
+    /// title there would attach the to-do to a different meeting that happens to
+    /// share a name, which is the bug the id exists to prevent.
+    func source(in sessions: [RecordingSession]) -> RecordingSession? {
+        if let id = sourceRecordingId {
+            return sessions.first { $0.id == id }
+        }
+        guard let title = sourceRecordingTitle else { return nil }
+        let matches = sessions.filter { $0.displayTitle == title }
+        return matches.count == 1 ? matches[0] : nil
+    }
+}

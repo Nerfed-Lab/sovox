@@ -94,6 +94,12 @@ would have claimed a request was still running forever. It is now derived from
 `inFlightDestination` rather than `settings.destination`, which is only the
 default and is overridable per recording.
 
+**Binding to-dos by id broke every to-do already on disk.** Those carry a nil
+id, so the strict id lookup left their source link dead. Resolution is now id
+first, with a title fallback used only when there is no id and only when exactly
+one recording matches. An id that is set and does not resolve still refuses to
+rebind, because that means the recording was deleted.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

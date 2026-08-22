@@ -115,3 +115,43 @@ final class BridgeBusyNoticeTests: XCTestCase {
         XCTAssertNil(handoff.pendingTodoResponse)
     }
 }
+
+/// To-dos written before the source id existed carry only a title.
+final class TodoSourceResolutionTests: XCTestCase {
+
+    private func recording(_ id: String, _ title: String) -> RecordingSession {
+        var s = RecordingSession(id: id, startDate: Date(), source: .pasted)
+        s.userTitle = title
+        return s
+    }
+
+    private func todo(id: String?, title: String?) -> TodoItem {
+        TodoItem(text: "t", sourceRecordingId: id, sourceRecordingTitle: title, origin: .ai)
+    }
+
+    func testTheIdWinsEvenWhenAnotherRecordingSharesTheTitle() {
+        let sessions = [recording("a", "Budget call"), recording("b", "Budget call")]
+        XCTAssertEqual(todo(id: "b", title: "Budget call").source(in: sessions)?.id, "b")
+    }
+
+    func testALegacyToDoStillResolvesByTitle() {
+        let sessions = [recording("a", "Budget call")]
+        XCTAssertEqual(todo(id: nil, title: "Budget call").source(in: sessions)?.id, "a",
+                       "to-dos created before the id was stored must keep their link")
+    }
+
+    func testALegacyToDoDoesNotGuessBetweenTwoRecordingsOfTheSameName() {
+        let sessions = [recording("a", "Budget call"), recording("b", "Budget call")]
+        XCTAssertNil(todo(id: nil, title: "Budget call").source(in: sessions))
+    }
+
+    func testADeletedRecordingDoesNotRebindByTitle() {
+        let sessions = [recording("b", "Budget call")]
+        XCTAssertNil(todo(id: "gone", title: "Budget call").source(in: sessions),
+                     "a set id that no longer resolves means the recording is gone")
+    }
+
+    func testNoTitleAndNoIdResolvesToNothing() {
+        XCTAssertNil(todo(id: nil, title: nil).source(in: [recording("a", "x")]))
+    }
+}

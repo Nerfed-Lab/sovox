@@ -272,7 +272,7 @@ struct TodoDetailView: View {
                     LabeledContent("Origin", value: todo.origin == .ai ? "From a recording" : "Added by you")
 
                     if let title = todo.sourceRecordingTitle {
-                        if let session = store.sessions.first(where: { $0.id == todo.sourceRecordingId }) {
+                        if let session = todo.source(in: store.sessions) {
                             NavigationLink {
                                 HistoryDetailView(sessionID: session.id)
                             } label: {
