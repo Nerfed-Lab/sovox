@@ -38,6 +38,10 @@ struct SovoxApp: App {
                         // A draft that iOS refused to open while the scene was
                         // settling gets its second chance here.
                         Task { await handoff.openPendingDraft() }
+                        // A result can be sitting in the file with nobody
+                        // reading it: the callback is the last action of a
+                        // hand built Shortcut, and it can be missing.
+                        Task { await handoff.collectIfResultWaiting(settings: settings, store: store) }
                         // iOS will not let a background process open another app,
                         // so a hand off that became ready while backgrounded is
                         // performed here instead.

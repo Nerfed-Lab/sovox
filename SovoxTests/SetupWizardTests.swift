@@ -65,3 +65,42 @@ final class SetupWizardTests: XCTestCase {
         XCTAssertEqual(rows[3].value, "\(SovoxURL.scheme)://\(SovoxURL.Host.done)")
     }
 }
+
+/// The recovery screen and the wizard teach the same Shortcut. They disagreed:
+/// the recovery screen left out the callback, so a Shortcut built from it ran
+/// perfectly and Sovox never heard the answer was ready.
+final class RecipeAgreementTests: XCTestCase {
+
+    func testBothListsTeachTheCallback() {
+        for destination in AIDestination.allCases {
+            let steps = BridgeShortcutRecipe.steps(for: destination).joined(separator: "\n")
+            let rows = BridgeShortcutRecipe.setupRows(for: destination)
+                .map { "\($0.action) \($0.value)" }.joined(separator: "\n")
+            XCTAssertTrue(steps.contains(SovoxURL.done.absoluteString),
+                          "\(destination) steps never tell the user to call back")
+            XCTAssertTrue(rows.contains(SovoxURL.done.absoluteString))
+        }
+    }
+
+    func testBothListsNameTheSameTwoFiles() {
+        for destination in AIDestination.allCases {
+            let steps = BridgeShortcutRecipe.steps(for: destination).joined(separator: "\n")
+            let rows = BridgeShortcutRecipe.setupRows(for: destination)
+                .map(\.value).joined(separator: "\n")
+            for name in [RecordingPaths.pendingPromptFile.lastPathComponent,
+                         RecordingPaths.resultFile.lastPathComponent] {
+                XCTAssertTrue(steps.contains(name), "\(name) missing from steps")
+                XCTAssertTrue(rows.contains(name), "\(name) missing from wizard rows")
+            }
+        }
+    }
+
+    func testNoStepHardcodesAFileName() {
+        // The rename already broke these once by leaving capture- in the text.
+        for destination in AIDestination.allCases {
+            for step in BridgeShortcutRecipe.steps(for: destination) {
+                XCTAssertFalse(step.lowercased().contains("capture"))
+            }
+        }
+    }
+}

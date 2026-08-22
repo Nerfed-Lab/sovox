@@ -91,8 +91,8 @@ final class HandoffTests: XCTestCase {
         XCTAssertTrue(parsed.body.contains("#q4"))
     }
 
-    func testBridgeRecipeHasExactlyFourActions() {
-        XCTAssertEqual(BridgeShortcutRecipe.steps(for: .chatgpt).count, 4)
+    func testBridgeRecipeHasExactlyFiveActions() {
+        XCTAssertEqual(BridgeShortcutRecipe.steps(for: .chatgpt).count, 5)
         XCTAssertEqual(BridgeShortcutRecipe.name(for: .chatgpt), "Sovox Bridge - ChatGPT")
         XCTAssertEqual(BridgeShortcutRecipe.name(for: .claude), "Sovox Bridge - Claude")
     }

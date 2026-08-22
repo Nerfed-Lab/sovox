@@ -202,6 +202,17 @@ exchanges were left out, and the guard counts transcripts plus the history that
 actually survives. A single oversized turn is still sent whole, since a follow
 up without the question it follows is useless.
 
+**The recovery screen taught a Shortcut that could never call back.** The setup
+wizard listed five actions including Open URL; the screen shown when the bridge
+Shortcut is missing listed four and left the callback out. A user following that
+screen built a Shortcut that read the prompt, asked the model and saved the
+answer, and Sovox waited forever for a callback that was never going to come.
+Both lists now come with the callback step spelled out, and the file names come
+from `RecordingPaths` rather than being typed twice. On top of that, becoming
+active now collects a result that is already sitting in the file: only when it
+exists and belongs to the current request, so returning to the app while the
+model is still thinking cannot cancel a request that is still alive.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

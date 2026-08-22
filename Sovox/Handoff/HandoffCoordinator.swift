@@ -344,6 +344,21 @@ final class HandoffCoordinator {
     }
 
     /// Step two, entered from sovox://done.
+    /// Picks up a result nobody told us about.
+    ///
+    /// The callback is the last action of a Shortcut the user builds by hand, so
+    /// it can be missing or mistyped, and a Shortcut that finishes while Sovox
+    /// is backgrounded has nothing to open either. Only runs when the file is
+    /// already there and belongs to this request, so returning to the app while
+    /// the model is still thinking cannot cancel a request that is still alive.
+    func collectIfResultWaiting(settings: AppSettings, store: RecordingStore) async {
+        restoreInFlightRequest()
+        guard isInFlight, isFresh(RecordingPaths.resultFile),
+              let text = try? String(contentsOf: RecordingPaths.resultFile, encoding: .utf8),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        await collectResult(settings: settings, store: store)
+    }
+
     func collectResult(settings: AppSettings, store: RecordingStore) async {
         restoreInFlightRequest()
         phase = .collectingResult

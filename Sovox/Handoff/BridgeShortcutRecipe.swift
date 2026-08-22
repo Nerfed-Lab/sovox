@@ -5,10 +5,12 @@ import Foundation
 enum BridgeShortcutRecipe {
     static func steps(for destination: AIDestination) -> [String] {
         [
-            "Get File from Folder: choose \(RecordingPaths.filesLocation), sovox-pending.txt. Switch Show Document Picker off.",
+            "Get File from Folder: choose \(RecordingPaths.filesLocation), \(RecordingPaths.pendingPromptFile.lastPathComponent). Switch Show Document Picker off.",
             "Get Text from Input: pass the file from step one.",
             "\(destination.title): ask it the text from step two. Use the Ask ChatGPT action from the ChatGPT app, or the Ask Claude action from the Claude app.",
-            "Save File: save the result to \(RecordingPaths.filesLocation), name it sovox-result.txt, Overwrite If File Exists on, Ask Where To Save off."
+            "Save File: save the result to \(RecordingPaths.filesLocation), name it \(RecordingPaths.resultFile.lastPathComponent), Overwrite If File Exists on, Ask Where To Save off.",
+            // Without this the Shortcut works and Sovox never hears about it.
+            "Open URL: \(SovoxURL.done.absoluteString). This is what tells Sovox the answer is ready."
         ]
     }
 
