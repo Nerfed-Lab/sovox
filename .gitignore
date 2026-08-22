@@ -1,0 +1,15 @@
+# App Store Connect API key config. The .p8 itself lives outside the repo,
+# in ~/.appstoreconnect/private_keys, and is never committed.
+asc-key.env
+
+# Build products
+build/
+DerivedData/
+*.xcarchive
+
+# Xcode user state
+*.xcuserdatad
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+.DS_Store
