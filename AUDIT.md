@@ -128,6 +128,14 @@ of the notes as fits with a line saying it is cut short. The prefix is measured
 after percent encoding, since encoding expands by up to three characters per
 byte.
 
+**Nothing capped the subject line.** The model is asked for a three to five
+word topic and will sometimes return a paragraph. That produced an unreadable
+Outlook subject and pushed the ms-outlook URL toward the length where the tail,
+which is the body, starts getting dropped. Topic is clipped to 80 characters and
+each name to 40, both at a word boundary. Only the count changed: the shape of
+the line, and the rule that empty components collapse with their separator, are
+untouched.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

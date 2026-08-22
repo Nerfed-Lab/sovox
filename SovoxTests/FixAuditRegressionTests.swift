@@ -276,3 +276,41 @@ final class OutlookOverflowTests: XCTestCase {
                        OutlookComposer.truncationNotice)
     }
 }
+
+/// The model is asked for a three to five word topic. Nothing made it comply.
+final class SubjectLengthTests: XCTestCase {
+
+    private let when = Date(timeIntervalSince1970: 1_755_871_800)
+
+    func testARunawayTopicIsClipped() {
+        let topic = String(repeating: "quarterly reforecast discussion ", count: 40)
+        let subject = SubjectBuilder.subject(date: when, topic: topic, attendees: [],
+                                             timeZone: TimeZone(identifier: "UTC")!)
+        let parts = subject.components(separatedBy: SubjectBuilder.separator)
+        XCTAssertEqual(parts.count, 4)
+        XCTAssertLessThanOrEqual(parts[3].count, SubjectBuilder.maxTopicCharacters)
+        XCTAssertFalse(parts[3].hasSuffix(" "))
+    }
+
+    func testClippingEndsOnAWordBoundary() {
+        XCTAssertEqual(SubjectBuilder.clip("one two three four", to: 12), "one two")
+    }
+
+    func testASingleWordLongerThanTheLimitIsCutHard() {
+        XCTAssertEqual(SubjectBuilder.clip(String(repeating: "a", count: 20), to: 5),
+                       String(repeating: "a", count: 5))
+    }
+
+    func testARunawayNameIsClippedToo() {
+        let name = String(repeating: "Priya ", count: 30)
+        let names = SubjectBuilder.cleanNames([name], excluding: "")
+        XCTAssertLessThanOrEqual(names.count, SubjectBuilder.maxNameCharacters)
+    }
+
+    func testAShortTopicIsUntouched() {
+        let subject = SubjectBuilder.subject(date: when, topic: "Q3 Budget Reforecast",
+                                             attendees: ["Priya Sharma"],
+                                             timeZone: TimeZone(identifier: "UTC")!)
+        XCTAssertTrue(subject.hasSuffix("Q3 Budget Reforecast | Priya Sharma"))
+    }
+}
