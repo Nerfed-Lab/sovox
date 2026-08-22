@@ -243,6 +243,15 @@ themselves survive for summarising. The stored transcript is untouched: this
 applies only to the copy that goes into a prompt, and all three builders share
 the choke point.
 
+**Self Test could come back all green next to a broken app.** It never checked
+the two things most likely to be wrong and least likely to announce themselves:
+whether the bridge Shortcut has ever worked end to end, and whether
+notifications are allowed. A bridge that was never built has no symptom until a
+recording is already waiting on it, and with the phone locked a notification is
+the only way the app can say anything at all, including that recording stopped
+for lack of space. Both are rows now, the bridge row offers Setup as its fix,
+and the checks come from one enum so a check cannot quietly drop out of the run.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

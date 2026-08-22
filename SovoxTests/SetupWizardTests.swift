@@ -104,3 +104,29 @@ final class RecipeAgreementTests: XCTestCase {
         }
     }
 }
+
+/// Self Test is what the user runs when something is wrong. Every check it
+/// omits is a green screen next to a broken app. Asserted against the check
+/// list rather than by running it: micRow asks for permission, which never
+/// returns in a test host.
+final class SelfTestCoverageTests: XCTestCase {
+
+    func testItCoversTheBridgeAndNotifications() {
+        let ids = Set(SelfTest.Check.allCases.map(\.rawValue))
+        XCTAssertTrue(ids.contains("bridge"), "a Shortcut that was never built has no other symptom")
+        XCTAssertTrue(ids.contains("notifications"), "the only channel while the phone is locked")
+    }
+
+    func testItStillCoversEverythingItCoveredBefore() {
+        let ids = Set(SelfTest.Check.allCases.map(\.rawValue))
+        for expected in ["mic", "speech", "model", "liveactivity", "background",
+                         "documents", "scheme", "shortcuts", "outlook", "disk"] {
+            XCTAssertTrue(ids.contains(expected), "\(expected) check disappeared")
+        }
+    }
+
+    func testEveryCheckIsListedOnlyOnce() {
+        XCTAssertEqual(Set(SelfTest.Check.allCases.map(\.rawValue)).count,
+                       SelfTest.Check.allCases.count)
+    }
+}

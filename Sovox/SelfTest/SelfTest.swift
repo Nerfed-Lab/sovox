@@ -13,6 +13,7 @@ enum SelfTestFix: Equatable, Sendable {
     case openShortcuts
     case getOutlook
     case openDictationHelp
+    case openSetupWizard
 }
 
 struct SelfTestRow: Identifiable, Equatable, Sendable {
@@ -39,20 +40,37 @@ final class SelfTest {
 
     private let engine = AudioCaptureEngine()
 
+    /// One list, so a check cannot quietly go missing from the run and a test
+    /// can assert what the screen covers without triggering permission prompts.
+    enum Check: String, CaseIterable {
+        case mic, speech, model, liveactivity, background, documents
+        case scheme, shortcuts, notifications, bridge, outlook, disk
+    }
+
     func runAll() async {
         isRunning = true
         rows = []
-        rows.append(await micRow())
-        rows.append(await speechRow())
-        rows.append(await modelRow())
-        rows.append(liveActivityRow())
-        rows.append(backgroundModeRow())
-        rows.append(documentsRow())
-        rows.append(urlSchemeRow())
-        rows.append(shortcutsRow())
-        rows.append(outlookRow())
-        rows.append(diskRow())
+        for check in Check.allCases {
+            rows.append(await row(for: check))
+        }
         isRunning = false
+    }
+
+    private func row(for check: Check) async -> SelfTestRow {
+        switch check {
+        case .mic: return await micRow()
+        case .speech: return await speechRow()
+        case .model: return await modelRow()
+        case .liveactivity: return liveActivityRow()
+        case .background: return backgroundModeRow()
+        case .documents: return documentsRow()
+        case .scheme: return urlSchemeRow()
+        case .shortcuts: return shortcutsRow()
+        case .notifications: return await notificationsRow()
+        case .bridge: return bridgeRow()
+        case .outlook: return outlookRow()
+        case .disk: return diskRow()
+        }
     }
 
     // MARK: Rows
@@ -169,6 +187,34 @@ final class SelfTest {
                            passed: ok,
                            detail: ok ? "shortcuts:// resolves" : "Shortcuts is not installed. The hand off to ChatGPT or Claude needs it.",
                            fix: ok ? .none : .openShortcuts)
+    }
+
+    /// Everything else can be green while the one thing the app exists to do is
+    /// broken: a bridge Shortcut that was never built has no symptom until a
+    /// recording is already waiting on it.
+    private func bridgeRow() -> SelfTestRow {
+        let destination = AppSettings.shared.destination
+        let verified = AppSettings.shared.isBridgeVerified(destination)
+        return SelfTestRow(id: "bridge",
+                           title: "\(destination.title) bridge verified",
+                           passed: verified,
+                           detail: verified
+                             ? "Verified end to end at least once"
+                             : "Never verified. Settings, Setup builds the Shortcut and checks it.",
+                           fix: verified ? .none : .openSetupWizard)
+    }
+
+    /// While the phone is locked a notification is the only way the app can say
+    /// anything at all, including that a recording stopped for lack of space.
+    private func notificationsRow() async -> SelfTestRow {
+        let ok = await Notifier.settingsAuthorised()
+        return SelfTestRow(id: "notifications",
+                           title: "Notifications allowed",
+                           passed: ok,
+                           detail: ok
+                             ? "Transcript ready and stopped recording alerts will arrive"
+                             : "Off. With the phone locked there is no other way to tell you a recording stopped.",
+                           fix: ok ? .none : .openAppSettings)
     }
 
     private func outlookRow() -> SelfTestRow {

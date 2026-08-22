@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SelfTestView: View {
     @State private var test = SelfTest()
+    @State private var showWizard = false
     @Environment(RecorderController.self) private var recorder
 
     var body: some View {
@@ -23,6 +24,9 @@ struct SelfTestView: View {
                 }
                 .padding(20)
             }
+        }
+        .sheet(isPresented: $showWizard) {
+            SetupWizardView()
         }
         .navigationTitle("Self Test")
         .navigationBarTitleDisplayMode(.inline)
@@ -118,6 +122,7 @@ struct SelfTestView: View {
         case .openShortcuts: return "Open Shortcuts"
         case .getOutlook: return "Get Outlook"
         case .openDictationHelp: return "Open iPhone settings"
+        case .openSetupWizard: return "Open Setup"
         }
     }
 
@@ -125,6 +130,8 @@ struct SelfTestView: View {
         switch fix {
         case .none:
             break
+        case .openSetupWizard:
+            showWizard = true
         case .openAppSettings, .openDictationHelp:
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)
