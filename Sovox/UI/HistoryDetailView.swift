@@ -54,7 +54,7 @@ struct HistoryDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if segment.state.isFailure {
+            if segment.state.isFailure, session.hasAudio {
                 Button("Retry") {
                     recorder.retrySegment(sessionID: session.id, index: segment.index)
                 }
@@ -65,6 +65,19 @@ struct HistoryDetailView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard(cornerRadius: 16)
+    }
+
+    /// Names the actual blocker. "Available once transcription finishes" was
+    /// wrong when the blocker is a segment that failed and will not finish on
+    /// its own.
+    private func deleteAudioCaption(_ session: RecordingSession) -> String {
+        if session.canDeleteAudio {
+            return "Keeps the transcript, notes, title and any to-dos linked to this recording."
+        }
+        if !session.failedSegments.isEmpty {
+            return "One or more segments failed. The audio is still the only copy of those minutes, so retry them first."
+        }
+        return "Available once transcription finishes. The audio is still the only copy of the untranscribed part."
     }
 
     private func icon(for state: SegmentState) -> String {
@@ -113,7 +126,7 @@ struct HistoryDetailView: View {
                         HStack {
                             Text("Segments").font(.headline)
                             Spacer()
-                            if !session.failedSegments.isEmpty {
+                            if !session.failedSegments.isEmpty, session.hasAudio {
                                 Button("Retry all failed") {
                                     recorder.retryAllFailed(sessionID: session.id)
                                 }
@@ -180,9 +193,7 @@ struct HistoryDetailView: View {
                         .disabled(!session.canDeleteAudio)
                         .opacity(session.canDeleteAudio ? 1 : 0.5)
 
-                        Text(session.canDeleteAudio
-                             ? "Keeps the transcript, notes, title and any to-dos linked to this recording."
-                             : "Available once transcription finishes. The audio is still the only copy of the untranscribed part.")
+                        Text(deleteAudioCaption(session))
                             .font(.caption)
                             .foregroundStyle(SovoxPalette.dim)
                     }

@@ -110,9 +110,18 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
 
     var hasAudio: Bool { source == .recorded && !audioRemoved && !segments.isEmpty }
 
-    /// Audio may only be discarded once every segment has settled. Until then it
-    /// is the only copy of text that has not been extracted yet.
-    var canDeleteAudio: Bool { hasAudio && isComplete && isTranscribed }
+    /// Every segment actually produced text. Distinct from isTranscribed, which
+    /// only means nothing is still in flight: a permanently failed segment is
+    /// terminal but has no text.
+    var isFullyTranscribed: Bool {
+        !segments.isEmpty && segments.allSatisfy { $0.state == .done }
+    }
+
+    /// Audio may only be discarded once every segment has actually succeeded.
+    /// Gating on isTranscribed was wrong: a failed segment counts as terminal,
+    /// so the audio, which is the only copy of those minutes, could be deleted
+    /// while the transcript still had a hole in it.
+    var canDeleteAudio: Bool { hasAudio && isComplete && isFullyTranscribed }
 
     var segmentURLs: [URL] {
         segments.sorted { $0.index < $1.index }.map { directory.appendingPathComponent($0.fileName) }

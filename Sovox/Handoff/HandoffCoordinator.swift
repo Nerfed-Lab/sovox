@@ -113,9 +113,12 @@ final class HandoffCoordinator {
         let defaults = UserDefaults.standard
         purpose = BridgePurpose(rawValue: defaults.string(forKey: Keys.purpose) ?? "") ?? .notes
         askQuestion = defaults.string(forKey: Keys.question)
-        guard let stored = defaults.string(forKey: Keys.sessionID) else { return }
-        sessionID = stored
         destination = AIDestination(rawValue: defaults.string(forKey: Keys.destination) ?? "") ?? .chatgpt
+        // Only the notes flow stores a sessionID. Gating the whole restore on it
+        // meant requestStartedAt stayed distantPast for ask, todos, verify and
+        // safety, isFresh then rejected every result, and the answer was lost on
+        // exactly the relaunch path the durability work was written for.
+        sessionID = defaults.string(forKey: Keys.sessionID)
         let stamp = defaults.double(forKey: Keys.startedAt)
         requestStartedAt = stamp > 0 ? Date(timeIntervalSince1970: stamp) : .distantPast
     }
@@ -345,6 +348,9 @@ final class HandoffCoordinator {
                 phase = .idle
                 return
             }
+            // Releases the bridge and removes the pending prompt, which holds
+            // the full plaintext transcript.
+            clearInFlightRequest()
             phase = .needsShortcutSetup(destination)
             return
         }

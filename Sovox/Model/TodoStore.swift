@@ -90,11 +90,16 @@ final class TodoStore {
     }
 
     /// Applies only what the user accepted. Nothing here runs without approval.
-    func apply(_ operations: [TodoOperation]) {
+    func apply(_ operations: [TodoOperation], sources: [RecordingSession] = []) {
         for operation in operations {
             switch operation {
             case .add(let text, let priority, let sourceTitle, let context):
+                // Bind by id, not by title. Titles are user editable and a
+                // deleted recording could otherwise rebind the link to a
+                // different meeting that happened to share a name.
+                let match = sources.first { $0.displayTitle == sourceTitle }
                 items.append(TodoItem(text: text,
+                                      sourceRecordingId: match?.id,
                                       sourceRecordingTitle: sourceTitle,
                                       contextExcerpt: context,
                                       priority: priority,

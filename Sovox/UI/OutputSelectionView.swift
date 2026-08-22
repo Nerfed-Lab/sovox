@@ -71,6 +71,7 @@ struct OutputSelectionView: View {
                 .pickerStyle(.segmented)
 
                 statusLine
+                busyLine
 
                 GlassProminentButton(title: "Generate",
                                      systemImage: "sparkles",
@@ -149,6 +150,13 @@ struct OutputSelectionView: View {
             EmptyView()
         case .failed(let message):
             label(message, "exclamationmark.triangle.fill", SovoxPalette.paused)
+        }
+    }
+
+    @ViewBuilder
+    private var busyLine: some View {
+        if let notice = handoff.busyNotice {
+            label(notice, "hourglass", SovoxPalette.pauseAmber)
         }
     }
 

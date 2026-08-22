@@ -61,7 +61,7 @@ struct TodosView: View {
             }
             .sheet(item: $review) { pending in
                 TodoReviewSheet(review: pending) { accepted in
-                    todos.apply(accepted)
+                    todos.apply(accepted, sources: store.sessions.filter { pending.sourceIDs.contains($0.id) })
                     // The watermark advances only now, after the review has
                     // actually completed.
                     todos.advanceWatermark(with: pending.sourceIDs)
@@ -272,7 +272,7 @@ struct TodoDetailView: View {
                     LabeledContent("Origin", value: todo.origin == .ai ? "From a recording" : "Added by you")
 
                     if let title = todo.sourceRecordingTitle {
-                        if let session = store.sessions.first(where: { $0.id == todo.sourceRecordingId || $0.displayTitle == title }) {
+                        if let session = store.sessions.first(where: { $0.id == todo.sourceRecordingId }) {
                             NavigationLink {
                                 HistoryDetailView(sessionID: session.id)
                             } label: {

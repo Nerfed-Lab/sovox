@@ -55,6 +55,39 @@ independent runs.
 The only two E37 and E42 grep hits in the whole tree are string literals inside
 `CapturePathGuardTests`, which exist precisely to assert their absence.
 
+# Post phase 14 adversarial rounds
+
+Two further rounds of refute first review. Round A raised 5 and confirmed 5,
+round B audited round A's own fixes and confirmed 2 more, both of which were
+cases where the first fix was incomplete.
+
+**canDeleteAudio counted a failed segment as transcribed.** `isTranscribed` is
+`allSatisfy { $0.state.isTerminal }` and `.failed` is terminal, so Delete audio
+only was fully enabled on a recording whose segment had permanently failed. That
+destroys the only copy of those minutes. Split out `isFullyTranscribed`, which
+requires `.done`, and gated deletion on it.
+
+**Retry was offered after the audio was deleted.** Retry reads the .m4a, so on a
+transcript only session the button could never succeed. Both retry affordances
+now require `session.hasAudio`, and the disabled caption names the real blocker
+instead of always claiming transcription is still running.
+
+**restoreInFlightRequest bailed on a nil sessionID.** Only the notes flow stores
+one, so ask, todos, verify and safety left `requestStartedAt` at `.distantPast`,
+`isFresh` rejected every result and the stranded answer was never written. The
+durability fix therefore only worked in process, which is exactly when it was
+not needed. Reads moved above the guard, and a dead flight now clears its keys
+and its plaintext prompt file rather than leaving both on disk.
+
+**The bridge lock had no user reachable escape.** `cancelInFlight` and
+`busyNotice` existed with zero call sites. A wedged flight is now visible on the
+record screen with a Cancel and unlock button, and a refused start says why.
+
+**AI to-dos bound to their source by title.** `sourceRecordingId` was never
+assigned, so the link resolved by `displayTitle`, which the user can edit and
+which two meetings can share. `apply` now takes the candidate sessions and
+stores the id.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

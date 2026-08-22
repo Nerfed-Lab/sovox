@@ -112,6 +112,20 @@ struct RecordView: View {
                     .foregroundStyle(SovoxPalette.dim)
             }
 
+            if handoff.isInFlight {
+                VStack(spacing: 6) {
+                    Label("Waiting on \(settings.destination.title)", systemImage: "hourglass")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(SovoxPalette.pauseAmber)
+                    Button("Cancel and unlock") { handoff.cancelInFlight() }
+                        .font(.footnote.weight(.semibold))
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity)
+                .glassCard(cornerRadius: 16)
+                .padding(.horizontal, 20)
+            }
+
             if let notice = recorder.liveActivityNotice {
                 Text(notice)
                     .font(.footnote)
