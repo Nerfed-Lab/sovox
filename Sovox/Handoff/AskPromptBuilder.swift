@@ -24,7 +24,7 @@ enum AskPromptBuilder {
         }
 
         let transcriptBlock = sources.map {
-            "=== \($0.title) (\($0.date)) ===\n\($0.transcript)"
+            "=== \($0.title) (\($0.date)) ===\n" + PromptBuilder.fenced($0.transcript)
         }.joined(separator: "\n\n")
 
         return """
@@ -41,6 +41,8 @@ enum AskPromptBuilder {
 
         TRANSCRIPTS:
         \(transcriptBlock)
+
+        \(PromptBuilder.transcriptDataNotice)
 
         QUESTION:
         \(question)

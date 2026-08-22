@@ -154,6 +154,17 @@ the last one and it finished while the user was still paused, nothing was queued
 and no drain callback was ever coming. `enqueueSegments` reports whether it
 queued anything now, and Stop finishes the session directly when it did not.
 
+**Only the notes prompt fenced its transcript.** Phase 12 hardened the master
+prompt and left the other two builders alone. The Ask prompt pasted transcripts
+in raw, and the to-do prompt did the same while asking the model for line shaped
+ADD, MERGE and DONE operations, which a transcript can contain verbatim: paste
+in accepts any text from the clipboard, so a forged `DONE | <uuid>` line is one
+paste away from a to-do being marked complete. All three builders now use the
+same `PromptBuilder.fenced` markers and the same notice saying the fenced text
+is data, with the to-do prompt adding that an operation shaped line inside a
+transcript is somebody talking. Instructions still come after the untrusted
+text in every case, so the last word is the app's.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
