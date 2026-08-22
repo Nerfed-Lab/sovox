@@ -241,3 +241,38 @@ final class StorageProbeTests: XCTestCase {
         XCTAssertTrue(StorageGuard.canStart(freeBytes: StorageGuard.minimumStartBytes))
     }
 }
+
+/// The overflow path told the user to attach a file. It never checked that the
+/// file was written.
+final class OutlookOverflowTests: XCTestCase {
+
+    func testATruncatedBodyFitsInsideTheEncodedLimit() {
+        let body = String(repeating: "notes and decisions ", count: 2000)
+        let out = OutlookComposer.truncatedBody(body)
+        XCTAssertLessThanOrEqual(URLEncoding.encode(out).count, OutlookComposer.encodedBodyLimit)
+        XCTAssertTrue(out.hasSuffix(OutlookComposer.truncationNotice))
+        XCTAssertTrue(out.hasPrefix("notes and decisions"), "keep the start of the notes")
+    }
+
+    func testTruncationMeasuresTheEncodedLengthNotTheCharacterCount() {
+        // Each of these encodes to nine characters, so a character count would
+        // overshoot the limit by a factor of three.
+        let body = String(repeating: "\u{1F600}", count: 4000)
+        let out = OutlookComposer.truncatedBody(body)
+        XCTAssertLessThanOrEqual(URLEncoding.encode(out).count, OutlookComposer.encodedBodyLimit)
+    }
+
+    func testAShortBodyIsLeftAloneByTheComposer() {
+        let draft = OutlookComposer.draft(to: "a@b.com", subject: "S", body: "short body & more")
+        XCTAssertNotNil(draft)
+        XCTAssertNil(draft?.attachmentFile, "no file, so nothing to tell the user to attach")
+        let url = draft?.url.absoluteString ?? ""
+        XCTAssertTrue(url.contains("short%20body%20%26%20more"),
+                      "an unescaped ampersand truncates the body at that point")
+    }
+
+    func testAnImpossibleLimitStillReturnsTheNotice() {
+        XCTAssertEqual(OutlookComposer.truncatedBody("anything", limit: 1),
+                       OutlookComposer.truncationNotice)
+    }
+}

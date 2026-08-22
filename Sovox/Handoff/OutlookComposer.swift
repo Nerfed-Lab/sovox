@@ -12,6 +12,27 @@ enum OutlookComposer {
     /// travels in the URL.
     static let encodedBodyLimit = 4000
 
+    static let truncationNotice = "\n\n[Cut short here. The notes were too long for a draft and could not be saved to a file. The full raw transcript is on your clipboard.]"
+
+    /// Longest prefix of the notes whose percent encoded form, plus the notice,
+    /// still fits. Percent encoding expands by up to three characters per byte,
+    /// so the length has to be measured after encoding rather than guessed.
+    static func truncatedBody(_ body: String, limit: Int = encodedBodyLimit) -> String {
+        let budget = limit - URLEncoding.encode(truncationNotice).count
+        guard budget > 0 else { return truncationNotice }
+        var low = 0
+        var high = body.count
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if URLEncoding.encode(String(body.prefix(mid))).count <= budget {
+                low = mid
+            } else {
+                high = mid - 1
+            }
+        }
+        return String(body.prefix(low)) + truncationNotice
+    }
+
     static func draft(to recipient: String,
                       subject: String,
                       body: String,
@@ -21,15 +42,23 @@ enum OutlookComposer {
 
         if URLEncoding.encode(body).count > encodedBodyLimit {
             let file = RecordingPaths.notesFile(for: date)
-            try? body.write(to: file, atomically: true, encoding: .utf8)
-            attachment = file
-            finalBody = """
-            The full notes were too long to prefill here.
+            do {
+                try body.write(to: file, atomically: true, encoding: .utf8)
+                attachment = file
+                finalBody = """
+                The full notes were too long to prefill here.
 
-            They are saved as \(file.lastPathComponent) in Files, under \(RecordingPaths.filesLocation).
+                They are saved as \(file.lastPathComponent) in Files, under \(RecordingPaths.filesLocation).
 
-            Tap the paperclip in this draft, choose Files, and attach it. The raw transcript is also on your clipboard.
-            """
+                Tap the paperclip in this draft, choose Files, and attach it. The raw transcript is also on your clipboard.
+                """
+            } catch {
+                // The write can fail on a full disk, which is exactly when the
+                // notes are most worth keeping. Telling the user to attach a
+                // file that was never written would lose them entirely, so send
+                // what fits and say plainly that it is cut short.
+                finalBody = truncatedBody(body)
+            }
         }
 
         var parameters: [(String, String)] = []

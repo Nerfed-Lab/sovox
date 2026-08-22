@@ -119,6 +119,15 @@ start is allowed, the remaining minutes figure keeps its last known value, and
 Self Test says the space could not be read rather than printing 0 bytes. A disk
 that is genuinely full still fails loudly on the next write.
 
+**The long notes path told the user to attach a file it never checked existed.**
+The overflow branch wrote the notes with `try?` and then said, in the draft
+itself, to attach that file. A failed write, which is most likely on the full
+disk that makes notes worth keeping, left the user attaching nothing and the
+notes gone. The write is checked now, and on failure the draft carries as much
+of the notes as fits with a line saying it is cut short. The prefix is measured
+after percent encoding, since encoding expands by up to three characters per
+byte.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
