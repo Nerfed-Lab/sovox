@@ -78,3 +78,46 @@ final class TranscriptionLocaleTests: XCTestCase {
         XCTAssertEqual(job.localeIdentifier, "en_IN")
     }
 }
+
+/// A supported language is not an installed one. Without a fallback, a device
+/// that never downloaded the en_IN asset failed every segment of every
+/// recording while holding a working en_US asset the whole time.
+final class LocaleFallbackTests: XCTestCase {
+
+    func testTheAskedForLocaleComesFirst() {
+        XCTAssertEqual(TranscriptionLocale.fallbackChain(for: "en_IN").first, "en_IN")
+    }
+
+    func testTheChainEndsAtUSEnglish() {
+        XCTAssertTrue(TranscriptionLocale.fallbackChain(for: "hi_IN").contains("en_US"))
+    }
+
+    func testTheChainHasNoDuplicates() {
+        let chain = TranscriptionLocale.fallbackChain(for: "en_US")
+        XCTAssertEqual(Set(chain).count, chain.count)
+    }
+
+    func testHyphensAreNormalisedThroughout() {
+        XCTAssertTrue(TranscriptionLocale.fallbackChain(for: "en-IN").allSatisfy { !$0.contains("-") })
+    }
+
+    func testTheAskedForLocaleWinsWhenItIsInstalled() {
+        let used = TranscriptionLocale.usable("en_IN") { _ in true }
+        XCTAssertEqual(used, "en_IN")
+    }
+
+    func testItFallsBackOnlyWhenTheAskedForOneIsMissing() {
+        let used = TranscriptionLocale.usable("en_IN") { $0 == "en_US" }
+        XCTAssertEqual(used, "en_US")
+    }
+
+    func testWithNothingInstalledItStillNamesWhatWasAsked() {
+        let used = TranscriptionLocale.usable("en_IN") { _ in false }
+        XCTAssertEqual(used, "en_IN", "the failure should name the language the user chose")
+    }
+
+    func testNoStoredLocaleUsesTheDefault() {
+        XCTAssertEqual(TranscriptionLocale.usable(nil) { _ in true },
+                       TranscriptionLocale.defaultIdentifier)
+    }
+}

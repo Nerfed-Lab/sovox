@@ -116,15 +116,25 @@ final class SelfTest {
     }
 
     private func modelRow() async -> SelfTestRow {
-        let supported = await SegmentTranscriber.shared.supportsOnDevice()
-        let locale = await SegmentTranscriber.shared.localeIdentifier()
+        let asked = TranscriptionLocale.normalise(AppSettings.shared.transcriptionLocale)
+        let used = TranscriptionLocale.usable(asked)
+        let ready = TranscriptionLocale.isOnDeviceReady(asked)
+        let usedReady = TranscriptionLocale.isOnDeviceReady(used)
+        let detail: String
+        if ready {
+            detail = "Installed for \(asked)"
+        } else if usedReady {
+            // Naming both is the point: the recording is being transcribed by a
+            // model the user did not pick.
+            detail = "Not installed for \(asked). Transcribing with \(used) instead."
+        } else {
+            detail = "Not installed for \(asked), and no fallback is installed either. Turn on Settings, General, Keyboard, Enable Dictation and iOS downloads it."
+        }
         return SelfTestRow(id: "model",
                            title: "On device speech model",
-                           passed: supported,
-                           detail: supported
-                             ? "Installed for \(locale)"
-                             : "Not installed for \(locale). Turn on Settings, General, Keyboard, Enable Dictation and iOS downloads it.",
-                           fix: supported ? .none : .openDictationHelp)
+                           passed: ready,
+                           detail: detail,
+                           fix: ready ? .none : .openDictationHelp)
     }
 
     private func liveActivityRow() -> SelfTestRow {

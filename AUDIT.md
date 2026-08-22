@@ -271,6 +271,22 @@ offered too, which is not a playable file until the engine closes it.
 `shareableAudioURLs(isRecording:)` filters on the file actually existing and
 drops the open segment.
 
+**A missing language asset failed every recording, permanently.** Phase 14a
+made the locale a setting and defaulted it to en_IN, but a supported language is
+not an installed one: `resolved` handed the asked for identifier straight to the
+recogniser, which threw `onDeviceModelMissing` for every segment of every
+recording on a device that had never downloaded that asset, while holding a
+working en_US asset the whole time. `TranscriptionLocale.usable` now walks a
+chain of asked for, phone language, en_US, and takes the first that is actually
+installed.
+
+The old Settings copy promised Sovox would never fall back. That promise is now
+kept differently: it does fall back, and it says so, naming the language it will
+transcribe with and that accuracy suffers. Self Test names both the asked for
+and the used locale, and still fails the row, because a fallback is a problem to
+fix rather than a state to accept. With nothing installed at all, the error
+still names the language the user chose.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

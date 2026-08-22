@@ -8,6 +8,20 @@ struct SettingsView: View {
     @State private var confirmAudioDelete = false
     @State private var showWizard = false
 
+    /// Says exactly what will happen instead, because the alternative to a
+    /// fallback is every segment of every recording failing permanently, and
+    /// the alternative to saying so is a transcript quietly made by a different
+    /// language model.
+    private var localeFallbackNote: String {
+        let asked = TranscriptionLocale.normalise(settings.transcriptionLocale)
+        let used = TranscriptionLocale.usable(asked)
+        let head = "Turn on Settings, General, Keyboard, Enable Dictation and pick this language. iOS downloads the model then."
+        guard used != asked else {
+            return head + " Until then transcription of new recordings will fail."
+        }
+        return head + " Until then Sovox transcribes with \(TranscriptionLocale.displayName(Locale(identifier: used))) instead, which is worse for accents this language handles better."
+    }
+
     var body: some View {
         @Bindable var settings = settings
 
@@ -47,7 +61,7 @@ struct SettingsView: View {
                                       systemImage: "exclamationmark.triangle.fill")
                                     .font(.footnote)
                                     .foregroundStyle(SovoxPalette.pauseAmber)
-                                Text("Turn on Settings, General, Keyboard, Enable Dictation and pick this language. iOS downloads the model then. Sovox will not silently fall back to another language.")
+                                Text(localeFallbackNote)
                                     .font(.caption)
                                     .foregroundStyle(SovoxPalette.dim)
                                 Button("Open iPhone Settings") {

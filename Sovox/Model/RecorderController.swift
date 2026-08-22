@@ -388,7 +388,7 @@ final class RecorderController: SovoxCommandHandler {
                                            index: index,
                                            fileURL: session.directory.appendingPathComponent(record.fileName),
                                            expectedDuration: duration,
-                                           localeIdentifier: TranscriptionLocale.resolved(session.localeIdentifier))
+                                           localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier))
         Task { await TranscriptionService.shared.enqueue(job) }
     }
 
@@ -402,7 +402,7 @@ final class RecorderController: SovoxCommandHandler {
                                      index: record.index,
                                      fileURL: session.directory.appendingPathComponent(record.fileName),
                                      expectedDuration: record.duration,
-                                     localeIdentifier: TranscriptionLocale.resolved(session.localeIdentifier))
+                                     localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier))
         }
         guard !jobs.isEmpty else { return false }
         Task { await TranscriptionService.shared.enqueue(jobs) }
