@@ -60,6 +60,53 @@ for k in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription UIBack
 done
 if [ $missing = 0 ]; then note "all 10 keys present" "PASS"; else note "Info.plist keys" "FAIL"; fail=1; fi
 
+echo "== hard constraints =="
+# The key being present says nothing about what it says. Every one of these
+# must read false, or the app can reach the network after all.
+ats_fail=0
+for k in NSAllowsArbitraryLoads NSAllowsArbitraryLoadsForMedia NSAllowsArbitraryLoadsInWebContent NSAllowsLocalNetworking; do
+  v=$(plutil -extract NSAppTransportSecurity.$k raw Sovox/Info.plist 2>/dev/null || echo absent)
+  case "$v" in false|absent) ;; *) echo "  $k is $v"; ats_fail=1 ;; esac
+done
+if [ "$(plutil -extract NSAppTransportSecurity.NSExceptionDomains json -o - Sovox/Info.plist 2>/dev/null)" != "{}" ]; then
+  echo "  NSExceptionDomains is not empty"; ats_fail=1
+fi
+if [ $ats_fail = 0 ]; then note "ATS blocks every outbound connection" "PASS"; else note "ATS" "FAIL"; fail=1; fi
+
+# Their presence alone triggers the corporate review the user has to avoid, so
+# absence is the requirement, not merely never calling the framework.
+forbidden=0
+for k in NSCalendarsUsageDescription NSCalendarsFullAccessUsageDescription \
+         NSContactsUsageDescription NSRemindersUsageDescription \
+         NSRemindersFullAccessUsageDescription NSPhotoLibraryUsageDescription \
+         NSLocationWhenInUseUsageDescription NSUserTrackingUsageDescription; do
+  for f in Sovox/Info.plist SovoxWidget/Info.plist; do
+    grep -q "<key>$k</key>" "$f" && { echo "  $k present in $f"; forbidden=1; }
+  done
+done
+grep -q "aps-environment" Sovox/Sovox.entitlements SovoxWidget/SovoxWidget.entitlements && { echo "  push entitlement present"; forbidden=1; }
+if [ $forbidden = 0 ]; then note "no permission keys that trigger review" "PASS"; else note "forbidden keys" "FAIL"; fail=1; fi
+
+# The rename broke the callback once by leaving a handler on the old scheme.
+# These pin the three strings the hand off depends on.
+scheme_fail=0
+[ "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes json -o - Sovox/Info.plist 2>/dev/null)" = '["sovox"]' ] \
+  || { echo "  CFBundleURLSchemes is not exactly [sovox]"; scheme_fail=1; }
+for s in shortcuts ms-outlook; do
+  plutil -extract LSApplicationQueriesSchemes json -o - Sovox/Info.plist 2>/dev/null | grep -q "\"$s\"" \
+    || { echo "  LSApplicationQueriesSchemes missing $s"; scheme_fail=1; }
+done
+if [ $scheme_fail = 0 ]; then note "URL schemes pinned" "PASS"; else note "URL schemes" "FAIL"; fail=1; fi
+
+# Stated by the user as unchangeable: a new identifier means a new App Store
+# Connect record and an app that can no longer read the container it shipped.
+if [ "$(grep -c 'PRODUCT_BUNDLE_IDENTIFIER = com.rishabh.capturenotes;' Sovox.xcodeproj/project.pbxproj)" -ge 1 ] \
+   && [ "$(grep -o 'PRODUCT_BUNDLE_IDENTIFIER = [^;]*;' Sovox.xcodeproj/project.pbxproj | grep -vc 'com.rishabh.capturenotes')" = "0" ]; then
+  note "bundle identifier unchanged" "PASS"
+else
+  note "bundle identifier" "FAIL"; fail=1
+fi
+
 echo "== E37, E41, E42 capture path =="
 must_be_absent "E37 no voice processing"           "setVoiceProcessingEnabled|isVoiceProcessingEnabled"
 must_be_absent "E37 no near field session mode"    "\.voiceChat|\.videoChat|\.gameChat|\.measurement"

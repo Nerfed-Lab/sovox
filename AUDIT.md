@@ -311,6 +311,17 @@ but invisible until the user happened to go looking. The purpose is read from
 the persisted record before collecting clears it, so the flow the user started
 is the flow they come back to, and it survives a relaunch.
 
+**The hard constraints were checked by their existence, not their content.**
+`verify.sh` asserted that `NSAppTransportSecurity` was present, which says
+nothing about whether it blocks anything: flipping `NSAllowsArbitraryLoads` to
+true would have passed. Four checks were added, and each was confirmed to fail
+when violated rather than merely to pass today: every ATS flag reads false with
+no exception domains; none of the permission keys whose mere presence triggers
+the corporate review is in either Info.plist, and no push entitlement is either;
+the URL scheme is exactly `sovox` with `shortcuts` and `ms-outlook` queryable,
+which is the string set the rename broke once; and every
+`PRODUCT_BUNDLE_IDENTIFIER` still sits under `com.rishabh.capturenotes`.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
