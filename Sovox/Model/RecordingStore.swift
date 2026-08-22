@@ -231,7 +231,12 @@ final class RecordingStore {
     }
 
     func addPasted(text: String, date: Date = Date()) -> RecordingSession {
-        let id = RecordingPaths.uniqueSessionID(for: date) + "-pasted"
+        // Checked against what is in memory as well as what is on disk: a
+        // manifest write that failed would otherwise leave the id looking free.
+        let id = RecordingPaths.uniqueSessionID(for: date, trailing: "-pasted") { candidate in
+            FileManager.default.fileExists(atPath: RecordingPaths.sessionDirectory(candidate).path)
+                || self.sessions.contains { $0.id == candidate }
+        }
         var session = RecordingSession(id: id, startDate: date, source: .pasted)
         session.transcript = text
         session.isComplete = true

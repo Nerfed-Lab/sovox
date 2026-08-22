@@ -228,3 +228,52 @@ final class ShareableAudioTests: XCTestCase {
         XCTAssertTrue(s.shareableAudioURLs(isRecording: true) { _ in true }.isEmpty)
     }
 }
+
+/// Uniqueness was checked on the timestamp, while the id that got used carried a
+/// -pasted suffix. Two pastes in the same minute therefore claimed the same id.
+final class SessionIDUniquenessTests: XCTestCase {
+
+    func testTwoPastesInTheSameMinuteGetDifferentIDs() {
+        let when = Date(timeIntervalSince1970: 1_755_871_800)
+        var taken: Set<String> = []
+        let first = RecordingPaths.uniqueSessionID(for: when, trailing: "-pasted") { taken.contains($0) }
+        taken.insert(first)
+        let second = RecordingPaths.uniqueSessionID(for: when, trailing: "-pasted") { taken.contains($0) }
+        XCTAssertNotEqual(first, second)
+        XCTAssertTrue(first.hasSuffix("-pasted"))
+        XCTAssertTrue(second.hasPrefix(first))
+    }
+
+    func testARecordingAndAPasteInTheSameMinuteDoNotCollide() {
+        let when = Date(timeIntervalSince1970: 1_755_871_800)
+        let recorded = RecordingPaths.uniqueSessionID(for: when) { _ in false }
+        let pasted = RecordingPaths.uniqueSessionID(for: when, trailing: "-pasted") { _ in false }
+        XCTAssertNotEqual(recorded, pasted)
+    }
+
+    func testItKeepsCountingUntilItFindsAFreeID() {
+        let when = Date(timeIntervalSince1970: 1_755_871_800)
+        var taken = Set<String>()
+        var ids: [String] = []
+        for _ in 0..<4 {
+            let id = RecordingPaths.uniqueSessionID(for: when, trailing: "-pasted") { taken.contains($0) }
+            taken.insert(id)
+            ids.append(id)
+        }
+        XCTAssertEqual(Set(ids).count, 4)
+    }
+
+    @MainActor
+    func testTwoPastedSessionsBothSurvive() {
+        let store = RecordingStore.shared
+        let when = Date(timeIntervalSince1970: 1_755_871_800)
+        let first = store.addPasted(text: "first transcript", date: when)
+        let second = store.addPasted(text: "second transcript", date: when)
+        defer { store.delete(first); store.delete(second) }
+
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertEqual(store.session(id: first.id)?.transcript, "first transcript",
+                       "the first paste must not be overwritten by the second")
+        XCTAssertEqual(store.session(id: second.id)?.transcript, "second transcript")
+    }
+}

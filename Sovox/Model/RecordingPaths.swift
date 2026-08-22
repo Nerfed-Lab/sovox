@@ -75,11 +75,19 @@ enum RecordingPaths {
     }
 
     /// A unique session id even if two recordings begin inside the same minute.
-    static func uniqueSessionID(for date: Date) -> String {
-        let base = sessionID(for: date)
+    /// A session id nothing else is using.
+    ///
+    /// The trailing part matters: uniqueness has to be checked on the whole id,
+    /// not on the timestamp alone. Pasted transcripts carry a -pasted suffix, so
+    /// checking the bare timestamp said "free" for two pastes in the same minute
+    /// and the second one overwrote the first.
+    static func uniqueSessionID(for date: Date,
+                                trailing: String = "",
+                                isTaken: (String) -> Bool = { FileManager.default.fileExists(atPath: sessionDirectory($0).path) }) -> String {
+        let base = sessionID(for: date) + trailing
         var candidate = base
         var suffix = 2
-        while FileManager.default.fileExists(atPath: sessionDirectory(candidate).path) {
+        while isTaken(candidate) {
             candidate = "\(base)-\(suffix)"
             suffix += 1
         }

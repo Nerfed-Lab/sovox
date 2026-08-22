@@ -287,6 +287,14 @@ and the used locale, and still fails the row, because a fallback is a problem to
 fix rather than a state to accept. With nothing installed at all, the error
 still names the language the user chose.
 
+**Two pastes in the same minute overwrote each other.** `addPasted` built its
+id as `uniqueSessionID(for:) + "-pasted"`, so uniqueness was checked on the bare
+timestamp while the id actually used carried a suffix. The check said free both
+times, `upsert` replaced the first session in the store and its manifest on
+disk, and the first transcript was gone with nothing said. Uniqueness is now
+checked on the whole id, and the paste path also checks what is already in
+memory, so a failed manifest write cannot make an id look free.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
