@@ -295,6 +295,14 @@ disk, and the first transcript was gone with nothing said. Uniqueness is now
 checked on the whole id, and the paste path also checks what is already in
 memory, so a failed manifest write cannot make an id look free.
 
+**Generate enabled itself for a case it then refused.** The button unlocks when
+either a built in output or a custom action is ticked, but the coordinator
+guarded on `modes` alone, so ticking only a custom action produced an enabled
+button whose only possible outcome was "Pick at least one output type". A custom
+action is an output: `hasRequestedOutput` accepts either, and the assembled
+prompt still carries the two header lines and the precedence reassertion with no
+built in sections at all.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

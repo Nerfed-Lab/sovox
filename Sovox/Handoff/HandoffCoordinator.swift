@@ -155,6 +155,10 @@ final class HandoffCoordinator {
         return UIApplication.shared.canOpenURL(url)
     }
 
+    nonisolated static func hasRequestedOutput(modes: Set<OutputMode>, customActions: [CustomAction]) -> Bool {
+        !modes.isEmpty || !customActions.isEmpty
+    }
+
     /// Step one. Writes the prompt where the Shortcut can read it, then hands
     /// control to Shortcuts. Only ever called while the app is foreground.
     func generate(session: RecordingSession,
@@ -172,7 +176,10 @@ final class HandoffCoordinator {
             phase = .failed("Sovox can only hand off while it is on screen.")
             return
         }
-        guard !modes.isEmpty else {
+        // A custom action is an output. The Generate button has always enabled
+        // itself for one, so refusing here made an enabled button that could
+        // only ever fail.
+        guard HandoffCoordinator.hasRequestedOutput(modes: modes, customActions: customActions) else {
             phase = .failed("Pick at least one output type.")
             return
         }

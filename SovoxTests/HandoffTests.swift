@@ -97,3 +97,37 @@ final class HandoffTests: XCTestCase {
         XCTAssertEqual(BridgeShortcutRecipe.name(for: .claude), "Sovox Bridge - Claude")
     }
 }
+
+/// The Generate button enables itself when only a custom action is ticked. The
+/// coordinator used to refuse exactly that, so the button could only fail.
+final class CustomOnlyGenerationTests: XCTestCase {
+
+    private func action() throws -> CustomAction {
+        try CustomActionSanitiser.sanitise(name: "Client follow-up draft",
+                                           instruction: "Draft a short follow-up email.",
+                                           includeByDefault: false).action
+    }
+
+    func testACustomActionAloneCountsAsARequestedOutput() throws {
+        XCTAssertTrue(HandoffCoordinator.hasRequestedOutput(modes: [], customActions: [try action()]))
+    }
+
+    func testNothingTickedIsStillRefused() {
+        XCTAssertFalse(HandoffCoordinator.hasRequestedOutput(modes: [], customActions: []))
+    }
+
+    func testABuiltInOutputAloneIsEnough() {
+        XCTAssertTrue(HandoffCoordinator.hasRequestedOutput(modes: [.actionsAndDecisions], customActions: []))
+    }
+
+    func testACustomOnlyPromptStillCarriesTheHeaderContractAndTheAction() throws {
+        let prompt = PromptBuilder.build(transcript: "we agreed the budget",
+                                         modes: [],
+                                         customActions: [try action()],
+                                         ownName: "Rishabh")
+        XCTAssertTrue(prompt.contains("SUBJECT:"))
+        XCTAssertTrue(prompt.contains("ATTENDEES:"))
+        XCTAssertTrue(prompt.contains("Draft a short follow-up email."))
+        XCTAssertTrue(prompt.contains(PromptBuilder.precedenceReassertion))
+    }
+}
