@@ -192,6 +192,16 @@ forward, so `commandStart` now raises the reminder there and returns
 `awaitingConsent` rather than reporting a recording that has not begun. The
 recording starts when the user confirms.
 
+**The Ask context guard counted the wrong thing.** The bridge is stateless, so
+every prior turn is resent with every question, and nothing bounded the thread.
+The guard measured transcripts only, so a long thread showed green while the
+prompt it was guarding had grown past the block threshold on history alone,
+which is exactly the silent truncation it exists to prevent. History is now
+capped at 12,000 characters, oldest dropped first, the prompt says how many
+exchanges were left out, and the guard counts transcripts plus the history that
+actually survives. A single oversized turn is still sent whole, since a follow
+up without the question it follows is useless.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

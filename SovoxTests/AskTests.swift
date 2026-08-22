@@ -85,3 +85,51 @@ final class AskTests: XCTestCase {
         XCTAssertTrue(text.hasSuffix("QUESTION:\nthe last thing"))
     }
 }
+
+/// The bridge is stateless, so every prior turn is resent. Nothing bounded that,
+/// and the context guard counted only the transcripts.
+final class AskHistoryBudgetTests: XCTestCase {
+
+    private func turn(_ size: Int, index: Int) -> AskTurn {
+        AskTurn(question: "q\(index)", answer: String(repeating: "a", count: size))
+    }
+
+    private let source = AskPromptBuilder.Source(title: "T", date: "d", transcript: "transcript")
+
+    func testOldTurnsAreDroppedOldestFirst() {
+        let history = (1...10).map { turn(3_000, index: $0) }
+        let kept = AskPromptBuilder.recentHistory(history)
+        XCTAssertLessThanOrEqual(AskPromptBuilder.historyCharacterCount(kept),
+                                 AskPromptBuilder.historyBudget)
+        XCTAssertEqual(kept.last?.question, "q10", "the most recent turn always survives")
+        XCTAssertFalse(kept.contains { $0.question == "q1" })
+    }
+
+    func testASingleOversizedTurnIsStillKept() {
+        let history = [turn(50_000, index: 1)]
+        XCTAssertEqual(AskPromptBuilder.recentHistory(history).count, 1,
+                       "a follow up must not lose the question it follows")
+    }
+
+    func testTheGuardCountsTheHistoryItWillActuallySend() {
+        let history = (1...5).map { turn(2_000, index: $0) }
+        let counted = AskPromptBuilder.promptCharacterCount(sources: [source], history: history)
+        XCTAssertGreaterThan(counted, AskPromptBuilder.combinedCharacterCount([source]),
+                             "counting transcripts alone shows green while the prompt is far bigger")
+    }
+
+    func testAnElidedThreadSaysSo() {
+        let history = (1...10).map { turn(3_000, index: $0) }
+        let prompt = AskPromptBuilder.build(question: "next", sources: [source], history: history)
+        XCTAssertTrue(prompt.contains("earlier exchanges not included"))
+        XCTAssertFalse(prompt.contains("q1\n"), "the dropped turns are really gone")
+    }
+
+    func testAShortThreadIsSentWholeWithNoNotice() {
+        let history = [turn(10, index: 1), turn(10, index: 2)]
+        let prompt = AskPromptBuilder.build(question: "next", sources: [source], history: history)
+        XCTAssertFalse(prompt.contains("earlier exchanges not included"))
+        XCTAssertTrue(prompt.contains("q1"))
+        XCTAssertTrue(prompt.contains("q2"))
+    }
+}

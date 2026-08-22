@@ -53,7 +53,7 @@ struct AskView: View {
     }
 
     private var characterCount: Int {
-        AskPromptBuilder.combinedCharacterCount(sources)
+        AskPromptBuilder.promptCharacterCount(sources: sources, history: ask.turns)
     }
 
     private var verdict: AskContextGuard.Verdict {
