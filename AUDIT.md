@@ -88,6 +88,12 @@ assigned, so the link resolved by `displayTitle`, which the user can edit and
 which two meetings can share. `apply` now takes the candidate sessions and
 stores the id.
 
+**The busy notice outlived its flight.** Nothing cleared it, so once shown it
+would have claimed a request was still running forever. It is now derived from
+`isInFlight` rather than stored on screen, and the waiting banner names
+`inFlightDestination` rather than `settings.destination`, which is only the
+default and is overridable per recording.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

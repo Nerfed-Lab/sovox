@@ -94,3 +94,24 @@ final class FixAuditRegressionTests: XCTestCase {
         XCTAssertEqual(added?.sourceRecordingTitle, "A meeting that does not exist")
     }
 }
+
+/// The refusal notice and the cancel affordance are only useful if they track
+/// the flight they describe.
+@MainActor
+final class BridgeBusyNoticeTests: XCTestCase {
+
+    func testABusyNoticeIsNotShownWhenNothingIsInFlight() {
+        let handoff = HandoffCoordinator.shared
+        XCTAssertFalse(handoff.isInFlight)
+        XCTAssertNil(handoff.busyNotice, "a refusal about a finished flight is noise")
+    }
+
+    func testCancellingReleasesTheLockAndTheNotice() {
+        let handoff = HandoffCoordinator.shared
+        handoff.cancelInFlight()
+        XCTAssertFalse(handoff.isInFlight)
+        XCTAssertNil(handoff.busyNotice)
+        XCTAssertNil(handoff.pendingAskAnswer)
+        XCTAssertNil(handoff.pendingTodoResponse)
+    }
+}

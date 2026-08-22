@@ -74,7 +74,14 @@ final class HandoffCoordinator {
     private(set) var pendingAskAnswer: String?
     private(set) var askQuestion: String?
     /// Set when a start is refused because another request owns the bridge.
-    private(set) var busyNotice: String?
+    /// Read through busyNotice, which stops reporting it once that flight ends,
+    /// so a refusal cannot sit on screen after the thing it refers to is gone.
+    private var busyNoticeText: String?
+    var busyNotice: String? { isInFlight ? busyNoticeText : nil }
+
+    /// Which app the current flight went to. Not settings.destination: that is
+    /// only the default and every flow can be overridden per recording.
+    var inFlightDestination: AIDestination { destination }
     /// Raw operation lines from a to-do refresh, awaiting review. Nothing is
     /// applied until the user accepts it.
     private(set) var pendingTodoResponse: String?
@@ -157,7 +164,7 @@ final class HandoffCoordinator {
                   destination: AIDestination,
                   settings: AppSettings) {
         guard !isInFlight else {
-            busyNotice = "Another request is still running. Wait for it to come back, or cancel it."
+            busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
         }
 
@@ -230,7 +237,7 @@ final class HandoffCoordinator {
     /// for the answer.
     func ask(question: String, prompt: String, destination: AIDestination) {
         guard !isInFlight else {
-            busyNotice = "Another request is still running. Wait for it to come back, or cancel it."
+            busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
         }
 
@@ -284,7 +291,7 @@ final class HandoffCoordinator {
     /// Phase 9. Same bridge again.
     func refreshTodos(prompt: String, destination: AIDestination) {
         guard !isInFlight else {
-            busyNotice = "Another request is still running. Wait for it to come back, or cancel it."
+            busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
         }
 
@@ -503,7 +510,7 @@ final class HandoffCoordinator {
     /// three failure modes occurred.
     func verifyBridge(destination: AIDestination) {
         guard !isInFlight else {
-            busyNotice = "Another request is still running. Wait for it to come back, or cancel it."
+            busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
         }
 
@@ -542,7 +549,7 @@ final class HandoffCoordinator {
     /// assert on what the model actually produced.
     func runSafetyProbe(prompt: String, destination: AIDestination) {
         guard !isInFlight else {
-            busyNotice = "Another request is still running. Wait for it to come back, or cancel it."
+            busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
         }
 
@@ -581,11 +588,12 @@ final class HandoffCoordinator {
         verifyingDestination = nil
     }
 
-    func clearBusyNotice() { busyNotice = nil }
+    func clearBusyNotice() { busyNoticeText = nil }
 
     /// Releases the channel when a round trip never comes back.
     func cancelInFlight() {
         clearInFlightRequest()
+        busyNoticeText = nil
         pendingAskAnswer = nil
         pendingTodoResponse = nil
         pendingSafetyResponse = nil

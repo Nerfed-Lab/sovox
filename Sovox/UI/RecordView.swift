@@ -114,7 +114,7 @@ struct RecordView: View {
 
             if handoff.isInFlight {
                 VStack(spacing: 6) {
-                    Label("Waiting on \(settings.destination.title)", systemImage: "hourglass")
+                    Label("Waiting on \(handoff.inFlightDestination.title)", systemImage: "hourglass")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(SovoxPalette.pauseAmber)
                     Button("Cancel and unlock") { handoff.cancelInFlight() }
