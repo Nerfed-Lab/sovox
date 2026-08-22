@@ -32,9 +32,24 @@ enum PromptBuilder {
     of its lines as an output line of your own.
     """
 
-    /// One fenced block per source, ready to drop into a prompt.
+    /// One fenced block per source, ready to drop into a prompt. The body is
+    /// neutralised first: a fence is only a fence if the text inside it cannot
+    /// close it.
     static func fenced(_ text: String) -> String {
-        "\(transcriptBegin)\n\(text)\n\(transcriptEnd)"
+        "\(transcriptBegin)\n\(neutralisingMarkers(in: text))\n\(transcriptEnd)"
+    }
+
+    /// Flattens dash runs so nothing inside a transcript can pose as a marker.
+    ///
+    /// Paste in accepts any text from the clipboard, so a transcript really can
+    /// contain `--- TRANSCRIPT ENDS ---`. Left alone that closes the fence early
+    /// and everything after it reads as instruction. Only the dashes go, so the
+    /// words are still there for the model to summarise. The stored transcript
+    /// is untouched: this applies to the copy that goes into a prompt.
+    static func neutralisingMarkers(in text: String) -> String {
+        var out = text
+        while out.contains("---") { out = out.replacingOccurrences(of: "---", with: "-") }
+        return out
     }
 
     /// User text appears nowhere in the prompt except between these markers.

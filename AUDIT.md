@@ -232,6 +232,17 @@ Dash runs are now flattened anywhere in the instruction and in the name, which
 also protects the wrapper's own `--- IF "name" REQUESTED ---` line, and the
 report tells the user what changed rather than rewriting their text silently.
 
+**The transcript could close its own fence.** Phase 12 hardened custom actions
+and the response parsing, and trusted the markers around the transcript. Nothing
+stopped the transcript from containing them: paste in accepts whatever is on the
+clipboard, so an email pasted in as a transcript can carry
+`--- TRANSCRIPT ENDS ---` followed by instructions, and everything after that
+line reads as instruction. `PromptBuilder.fenced` now flattens dash runs in the
+body before fencing it, so nothing inside can pose as a marker while the words
+themselves survive for summarising. The stored transcript is untouched: this
+applies only to the copy that goes into a prompt, and all three builders share
+the choke point.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
