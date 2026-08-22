@@ -68,6 +68,12 @@ enum CustomActionSanitiser {
                        .replacingOccurrences(of: "\n", with: " ")
             report.notes.append("Removed line breaks from the name.")
         }
+        // The wrapper's own opening line is --- IF "name" REQUESTED ---, so a
+        // dash run inside the name could close it.
+        if name.contains("--") {
+            while name.contains("--") { name = name.replacingOccurrences(of: "--", with: "-") }
+            report.notes.append("Flattened runs of dashes in the name, which could have closed the section header.")
+        }
         name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.count > maxNameLength {
             name = String(name.prefix(maxNameLength))
@@ -99,6 +105,18 @@ enum CustomActionSanitiser {
             report.notes.append("Removed \(droppedHeader) line\(droppedHeader == 1 ? "" : "s") starting with SUBJECT: or ATTENDEES: which would have forged a header.")
         }
         instruction = kept.joined(separator: "\n")
+
+        // Dropping lines that start with --- is not enough. A marker sitting
+        // mid line is still a marker to a model, and a forged
+        // --- TRANSCRIPT BEGINS --- after the real transcript would make
+        // everything below it, the precedence reassertion included, look like
+        // transcript rather than instruction.
+        if instruction.contains("---") {
+            while instruction.contains("---") {
+                instruction = instruction.replacingOccurrences(of: "---", with: "-")
+            }
+            report.notes.append("Flattened runs of dashes inside the instruction, which could have opened or closed a section.")
+        }
 
         if instruction.count > maxInstructionLength {
             instruction = String(instruction.prefix(maxInstructionLength))

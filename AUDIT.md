@@ -223,6 +223,15 @@ subject separator, flattens dash and equals runs and clips to the subject limit.
 It runs when the subject is stored and when the user renames, and
 `promptSafeTitle` cleans whatever an older build already wrote.
 
+**The custom action sanitiser only caught a fence at the start of a line.** It
+dropped lines matching `^\s*---` and left a marker sitting mid line alone, but a
+model reads a marker wherever it sits. A forged `--- TRANSCRIPT BEGINS ---`
+inside an instruction, which is assembled after the real transcript, would have
+made everything below it look like transcript, precedence reassertion included.
+Dash runs are now flattened anywhere in the instruction and in the name, which
+also protects the wrapper's own `--- IF "name" REQUESTED ---` line, and the
+report tells the user what changed rather than rewriting their text silently.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
