@@ -314,3 +314,52 @@ final class SubjectLengthTests: XCTestCase {
         XCTAssertTrue(subject.hasSuffix("Q3 Budget Reforecast | Priya Sharma"))
     }
 }
+
+/// A segment adopted from disk after a force quit has no duration. The session
+/// then reported a three hour meeting as 0m.
+final class MeasuredDurationTests: XCTestCase {
+
+    private func recovered() -> RecordingSession {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.segments = [SegmentRecord(index: 1, fileName: "seg-01.m4a", duration: 0, state: .pending, text: ""),
+                      SegmentRecord(index: 2, fileName: "seg-02.m4a", duration: 0, state: .pending, text: "")]
+        s.duration = 0
+        return s
+    }
+
+    func testMeasuringFillsInASegmentAndTheSessionTotal() {
+        var s = recovered()
+        XCTAssertTrue(s.applyMeasuredDuration(index: 1, seconds: 1800))
+        XCTAssertEqual(s.segments[0].duration, 1800)
+        XCTAssertEqual(s.duration, 1800)
+        XCTAssertTrue(s.applyMeasuredDuration(index: 2, seconds: 900))
+        XCTAssertEqual(s.duration, 2700)
+    }
+
+    func testAKnownDurationIsNeverOverwritten() {
+        var s = recovered()
+        s.segments[0].duration = 1795
+        XCTAssertFalse(s.applyMeasuredDuration(index: 1, seconds: 1800))
+        XCTAssertEqual(s.segments[0].duration, 1795)
+    }
+
+    func testTheElapsedClockFigureIsNeverShortened() {
+        var s = recovered()
+        // A live recording paused for ten minutes: elapsed exceeds the audio.
+        s.duration = 3300
+        XCTAssertTrue(s.applyMeasuredDuration(index: 1, seconds: 1800))
+        XCTAssertEqual(s.duration, 3300, "paused time is part of the meeting, not of the audio")
+    }
+
+    func testAZeroMeasurementChangesNothing() {
+        var s = recovered()
+        XCTAssertFalse(s.applyMeasuredDuration(index: 1, seconds: 0))
+        XCTAssertEqual(s.duration, 0)
+    }
+
+    func testAnUnknownSegmentIndexChangesNothing() {
+        var s = recovered()
+        XCTAssertFalse(s.applyMeasuredDuration(index: 9, seconds: 600))
+    }
+}

@@ -65,6 +65,9 @@ final class RecorderController: SovoxCommandHandler {
                 },
                 onDrained: { [weak self] sessionID in
                     self?.transcriptionQueueDrained(sessionID: sessionID)
+                },
+                onMeasure: { [weak self] sessionID, index, seconds in
+                    self?.transcriptionMeasured(sessionID: sessionID, index: index, seconds: seconds)
                 }
             )
         }
@@ -480,6 +483,17 @@ extension RecorderController {
               let slot = session.segments.firstIndex(where: { $0.index == index }) else { return }
         session.segments[slot].text = text
         session.transcript = session.stitchedTranscript
+        store.upsert(session)
+        if currentSession?.id == sessionID { currentSession = session }
+    }
+
+    /// Fills in a duration the app never had. Only ever writes over a zero: the
+    /// engine's own figure is authoritative for anything it recorded, and a
+    /// crash recovered session otherwise reports a three hour meeting as 0m in
+    /// History and in the ready notification.
+    func transcriptionMeasured(sessionID: String, index: Int, seconds: TimeInterval) {
+        guard var session = store.session(id: sessionID),
+              session.applyMeasuredDuration(index: index, seconds: seconds) else { return }
         store.upsert(session)
         if currentSession?.id == sessionID { currentSession = session }
     }

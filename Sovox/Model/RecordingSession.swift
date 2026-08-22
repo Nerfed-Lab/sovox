@@ -110,6 +110,22 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
 
     var hasAudio: Bool { source == .recorded && !audioRemoved && !segments.isEmpty }
 
+    /// Fills in a duration the app never had, for a segment adopted from disk
+    /// after a force quit. Only ever writes over a zero: the engine's own figure
+    /// is authoritative for anything it actually timed. Returns false when
+    /// nothing changed.
+    mutating func applyMeasuredDuration(index: Int, seconds: TimeInterval) -> Bool {
+        guard seconds > 0,
+              let slot = segments.firstIndex(where: { $0.index == index }),
+              segments[slot].duration <= 0 else { return false }
+        segments[slot].duration = seconds
+        let summed = segments.reduce(0) { $0 + $1.duration }
+        // A recorded session's own figure comes from the elapsed clock and
+        // includes paused time, so it is never shortened here.
+        if duration <= 0 || duration < summed { duration = summed }
+        return true
+    }
+
     /// Whether this one segment still has its .m4a. Checked per row because a
     /// session can lose some of its audio and keep the rest, and a retry that
     /// has no file to read can never succeed.

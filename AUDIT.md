@@ -136,6 +136,16 @@ each name to 40, both at a word boundary. Only the count changed: the shape of
 the line, and the rule that empty components collapse with their separator, are
 untouched.
 
+**A crash recovered recording reported itself as 0m.** `reconcile` adopts
+segment files that never made it into the manifest, which is exactly what a
+force quit leaves behind, and gives them `duration: 0` because the engine that
+would have timed them died with the app. Nothing ever filled that in, so
+History and the ready notification both described a three hour meeting as 0m.
+The transcription pipeline already opens the file, so it now reads the duration
+there and reports it back. `applyMeasuredDuration` only ever writes over a zero,
+and never shortens a recorded session's own figure, which comes from the elapsed
+clock and legitimately includes paused time.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

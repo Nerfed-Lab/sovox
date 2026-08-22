@@ -7,6 +7,9 @@ import Foundation
 typealias TranscriptionStateHandler = @Sendable @MainActor (String, Int, SegmentState) -> Void
 typealias TranscriptionTextHandler = @Sendable @MainActor (String, Int, String) -> Void
 typealias TranscriptionDrainHandler = @Sendable @MainActor (String) -> Void
+/// Duration read off the file itself, for segments the app adopted from disk
+/// after a force quit and therefore never timed.
+typealias TranscriptionMeasureHandler = @Sendable @MainActor (String, Int, TimeInterval) -> Void
 
 /// The transcription pipeline.
 ///
@@ -38,6 +41,7 @@ actor TranscriptionService {
     private var onState: TranscriptionStateHandler?
     private var onText: TranscriptionTextHandler?
     private var onDrained: TranscriptionDrainHandler?
+    private var onMeasure: TranscriptionMeasureHandler?
     private var thermalObserver: NSObjectProtocol?
     private var isDeferred = false
 
@@ -47,10 +51,12 @@ actor TranscriptionService {
 
     func attach(onState: @escaping TranscriptionStateHandler,
                 onText: @escaping TranscriptionTextHandler,
-                onDrained: @escaping TranscriptionDrainHandler) {
+                onDrained: @escaping TranscriptionDrainHandler,
+                onMeasure: TranscriptionMeasureHandler? = nil) {
         self.onState = onState
         self.onText = onText
         self.onDrained = onDrained
+        self.onMeasure = onMeasure
         startThermalObservation()
     }
 
@@ -112,6 +118,13 @@ actor TranscriptionService {
 
             do {
                 try await SegmentFinalisation.verify(url: job.fileURL)
+                // A segment adopted from disk carries no duration, because the
+                // engine that would have timed it died with the app. The file
+                // knows, and it is already open here.
+                if job.expectedDuration <= 0 {
+                    let measured = await SegmentFinalisation.duration(of: job.fileURL)
+                    if measured > 0 { await measure(job, seconds: measured) }
+                }
                 let text = try await SegmentTranscriber.shared.transcribe(
                     fileURL: job.fileURL,
                     expectedDuration: job.expectedDuration,
@@ -194,6 +207,11 @@ actor TranscriptionService {
         let sessionID = job.sessionID
         let index = job.index
         await MainActor.run { onText(sessionID, index, text) }
+    }
+
+    private func measure(_ job: Job, seconds: TimeInterval) async {
+        guard let handler = onMeasure else { return }
+        await MainActor.run { handler(job.sessionID, job.index, seconds) }
     }
 
     private func drained(_ sessionID: String) async {
