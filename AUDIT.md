@@ -184,6 +184,14 @@ is set when recording starts and cleared on stop, every delete path checks it,
 and the two affordances are simply absent for that session rather than present
 and refusing.
 
+**The consent reminder only existed on the record button.** Siri, the Control
+Centre control and the Shortcuts app all reached `start()` directly, so a user
+who switched on Announce consent still got a silent start from three of the four
+ways to begin a recording. Both intents that can start one already bring the app
+forward, so `commandStart` now raises the reminder there and returns
+`awaitingConsent` rather than reporting a recording that has not begun. The
+recording starts when the user confirms.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

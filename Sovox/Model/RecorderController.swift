@@ -29,6 +29,9 @@ final class RecorderController: SovoxCommandHandler {
     var alertMessage: String?
     /// Surfaced in the recording detail view so a failure is never silent.
     private(set) var lastTranscriptionFailure: String?
+    /// Set when a start arrived from an intent while the consent reminder is on.
+    /// The record screen presents the reminder and clears this.
+    var pendingConsentStart = false
     var liveActivityNotice: String?
     /// Set when transcription finished while the app was in the background.
     /// iOS refuses to open another app from the background, so the hand off is
@@ -238,6 +241,15 @@ final class RecorderController: SovoxCommandHandler {
 
     func commandStart() async -> SovoxCommandResult {
         if isRecordingNow { return .alreadyRunning }
+        // The consent reminder was only ever shown by the record button, so
+        // Siri, the Control Centre control and the Shortcuts app all started
+        // recording without it. Both intents that can start a recording bring
+        // the app forward, so the reminder is shown there and the recording
+        // begins when the user confirms. Saying "started" here would be a lie.
+        if settings.announceConsent {
+            pendingConsentStart = true
+            return .awaitingConsent
+        }
         return await start() ? .started : .startFailed
     }
 

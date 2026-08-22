@@ -147,3 +147,38 @@ final class LiveSessionDeletionTests: XCTestCase {
         XCTAssertFalse(store.deleteAudio(session))
     }
 }
+
+/// The consent reminder is a compliance setting. It was wired to the record
+/// button only, so Siri, the Control Centre control and the Shortcuts app all
+/// started recording without ever showing it.
+@MainActor
+final class ConsentOnIntentStartTests: XCTestCase {
+
+    func testAnIntentStartDefersToTheReminderWhenItIsOn() async {
+        let recorder = RecorderController.shared
+        let settings = AppSettings.shared
+        let previous = settings.announceConsent
+        defer { settings.announceConsent = previous; recorder.pendingConsentStart = false }
+
+        settings.announceConsent = true
+        recorder.pendingConsentStart = false
+        let result = await recorder.commandStart()
+
+        XCTAssertEqual(result, .awaitingConsent)
+        XCTAssertTrue(recorder.pendingConsentStart, "the record screen presents the reminder")
+        XCTAssertFalse(recorder.isRecordingNow, "nothing may start until the user confirms")
+    }
+
+    func testTheSpokenTextDoesNotClaimItStarted() {
+        let text = SovoxCommandResult.awaitingConsent.spokenText
+        XCTAssertFalse(text.lowercased().hasPrefix("started"))
+        XCTAssertTrue(text.contains("Start"))
+    }
+
+    func testEveryResultHasSpokenText() {
+        for result in [SovoxCommandResult.started, .stopped, .paused, .resumed,
+                       .unavailable, .startFailed, .alreadyRunning, .notRunning, .awaitingConsent] {
+            XCTAssertFalse(result.spokenText.isEmpty, "\(result) has nothing to say")
+        }
+    }
+}

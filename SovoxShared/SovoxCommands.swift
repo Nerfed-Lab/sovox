@@ -10,6 +10,7 @@ enum SovoxCommandResult: String, Sendable {
     case startFailed
     case alreadyRunning
     case notRunning
+    case awaitingConsent
 
     var spokenText: String {
         switch self {
@@ -21,6 +22,7 @@ enum SovoxCommandResult: String, Sendable {
         case .startFailed: return "Could not start. Open Sovox to see why."
         case .alreadyRunning: return "already recording"
         case .notRunning: return "not recording"
+        case .awaitingConsent: return "Sovox is open and waiting. Tell everyone you are recording, then tap Start."
         }
     }
 }

@@ -28,11 +28,16 @@ struct RecordView: View {
             }
         }
         .sheet(isPresented: $showWizard) { SetupWizardView() }
-        .fullScreenCover(isPresented: $showConsent) {
+        .fullScreenCover(isPresented: Binding(get: { showConsent || recorder.pendingConsentStart },
+                                              set: { if !$0 { showConsent = false; recorder.pendingConsentStart = false } })) {
             ConsentView(onStart: {
                 showConsent = false
+                recorder.pendingConsentStart = false
                 Task { await recorder.start() }
-            }, onCancel: { showConsent = false })
+            }, onCancel: {
+                showConsent = false
+                recorder.pendingConsentStart = false
+            })
         }
         .alert("Sovox", isPresented: Binding(get: { recorder.alertMessage != nil },
                                                set: { if !$0 { recorder.alertMessage = nil } })) {
