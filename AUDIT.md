@@ -263,6 +263,14 @@ retry as the way out, and the to-do refresh no longer treats a placeholder only
 session as a source. The placeholders themselves stay in the transcript the user
 reads: a stated gap is the point.
 
+**Share offered files that were not there.** The Audio section rendered a
+ShareLink per segment behind the session level `hasAudio` flag, so after the
+pruning fix a session could keep a segment record whose .m4a had been deleted in
+Files and still offer to share it, and the segment currently being written was
+offered too, which is not a playable file until the engine closes it.
+`shareableAudioURLs(isRecording:)` filters on the file actually existing and
+drops the open segment.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

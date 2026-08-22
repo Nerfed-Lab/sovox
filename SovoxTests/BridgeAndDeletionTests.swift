@@ -182,3 +182,49 @@ final class ConsentOnIntentStartTests: XCTestCase {
         }
     }
 }
+
+/// hasAudio is a session level flag, so it offered a share for files that were
+/// not there and for the one still being written.
+final class ShareableAudioTests: XCTestCase {
+
+    private func session(count: Int) -> RecordingSession {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.segments = (1...count).map {
+            SegmentRecord(index: $0,
+                          fileName: RecordingPaths.segmentFileName($0),
+                          duration: 60,
+                          state: .done,
+                          text: "text")
+        }
+        return s
+    }
+
+    func testAMissingFileIsNotOffered() {
+        let s = session(count: 3)
+        let urls = s.shareableAudioURLs(isRecording: false) { $0.index != 2 }
+        XCTAssertEqual(urls.map(\.lastPathComponent), ["seg-01.m4a", "seg-03.m4a"])
+    }
+
+    func testTheSegmentStillBeingWrittenIsNotOffered() {
+        let s = session(count: 3)
+        let urls = s.shareableAudioURLs(isRecording: true) { _ in true }
+        XCTAssertEqual(urls.map(\.lastPathComponent), ["seg-01.m4a", "seg-02.m4a"],
+                       "an open .m4a is not a playable file yet")
+    }
+
+    func testEverySegmentIsOfferedOnceRecordingStops() {
+        let s = session(count: 2)
+        XCTAssertEqual(s.shareableAudioURLs(isRecording: false) { _ in true }.count, 2)
+    }
+
+    func testNothingIsOfferedOnceTheAudioIsRemoved() {
+        var s = session(count: 2)
+        s.audioRemoved = true
+        XCTAssertTrue(s.shareableAudioURLs(isRecording: false) { _ in true }.isEmpty)
+    }
+
+    func testASingleSegmentRecordingOffersNothingWhileItRuns() {
+        let s = session(count: 1)
+        XCTAssertTrue(s.shareableAudioURLs(isRecording: true) { _ in true }.isEmpty)
+    }
+}

@@ -165,10 +165,11 @@ struct HistoryDetailView: View {
                         .glassCard(cornerRadius: 16)
                 }
 
-                if session.hasAudio, !session.segmentURLs.isEmpty {
+                let shareable = session.shareableAudioURLs(isRecording: !store.canDelete(session.id))
+                if !shareable.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Audio").font(.headline)
-                        ForEach(Array(session.segmentURLs.enumerated()), id: \.offset) { index, url in
+                        ForEach(Array(shareable.enumerated()), id: \.offset) { index, url in
                             ShareLink(item: url) {
                                 HStack {
                                     Image(systemName: "square.and.arrow.up")

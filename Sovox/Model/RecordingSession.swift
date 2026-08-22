@@ -160,6 +160,26 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
         segments.sorted { $0.index < $1.index }.map { directory.appendingPathComponent($0.fileName) }
     }
 
+    /// Files a share sheet can actually be given.
+    ///
+    /// hasAudio is a session level flag, so on its own it happily offered a
+    /// share for a segment whose file had been deleted in Files, and for the
+    /// segment still being written, which is not a playable .m4a until the
+    /// engine closes it.
+    func shareableAudioURLs(isRecording: Bool,
+                            exists: (SegmentRecord) -> Bool) -> [URL] {
+        guard hasAudio else { return [] }
+        let ordered = segments.sorted { $0.index < $1.index }
+        let openIndex = isRecording ? ordered.last?.index : nil
+        return ordered
+            .filter { $0.index != openIndex && exists($0) }
+            .map { directory.appendingPathComponent($0.fileName) }
+    }
+
+    func shareableAudioURLs(isRecording: Bool) -> [URL] {
+        shareableAudioURLs(isRecording: isRecording) { audioExists(for: $0) }
+    }
+
     var transcriptionProgress: Double {
         guard !segments.isEmpty else { return 0 }
         let settled = segments.filter { $0.state.isTerminal }.count
