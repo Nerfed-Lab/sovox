@@ -156,6 +156,8 @@ final class RecorderController: SovoxCommandHandler {
         nextRollDate = now.addingTimeInterval(settings.segmentSeconds)
         currentSession = session
         refreshRemainingMinutes()
+        // No delete path may touch this session until the engine lets go of it.
+        store.protectedSessionID = session.id
         state = .recording
         settings.sessionsStarted += 1
         store.upsert(session)
@@ -192,6 +194,7 @@ final class RecorderController: SovoxCommandHandler {
         store.upsert(session)
 
         activities.end(finalState: activityState())
+        store.protectedSessionID = nil
         state = session.segments.isEmpty ? .idle : .transcribing
         level = 0
 

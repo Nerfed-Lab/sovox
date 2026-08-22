@@ -83,10 +83,14 @@ struct HistoryView: View {
                 }
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        pendingDelete = session
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                    // The live recording has no delete action at all. Offering
+                    // one that the store refuses is a button that lies.
+                    if store.canDelete(session.id) {
+                        Button(role: .destructive) {
+                            pendingDelete = session
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                     Button {
                         renaming = session

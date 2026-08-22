@@ -11,6 +11,12 @@ final class RecordingStore {
     static let shared = RecordingStore()
 
     private(set) var sessions: [RecordingSession] = []
+
+    /// The recording currently being written. Deleting it would pull the
+    /// directory out from under a live AVAudioFile: the write handle stays
+    /// valid on an unlinked file, so the audio would go nowhere and nothing
+    /// would report an error until the session was already lost.
+    var protectedSessionID: String?
     /// Cached, because SettingsView reads it from a view body and walking the
     /// recordings tree on every body evaluation would be a real cost once there
     /// are a few hours of audio on disk.
@@ -181,7 +187,8 @@ final class RecordingStore {
     /// with them.
     @discardableResult
     func deleteAudio(_ session: RecordingSession) -> Bool {
-        guard var updated = self.session(id: session.id), updated.canDeleteAudio else { return false }
+        guard canDelete(session.id),
+              var updated = self.session(id: session.id), updated.canDeleteAudio else { return false }
         updated.audioRemoved = true
         upsert(updated)
         for url in session.segmentURLs {
@@ -202,17 +209,23 @@ final class RecordingStore {
         sessions.filter(\.canDeleteAudio).reduce(0) { $0 + audioBytes(of: $1) }
     }
 
-    func delete(_ session: RecordingSession) {
+    @discardableResult
+    func delete(_ session: RecordingSession) -> Bool {
+        guard canDelete(session.id) else { return false }
         try? FileManager.default.removeItem(at: session.directory)
         sessions.removeAll { $0.id == session.id }
         recomputeStorage()
+        return true
     }
 
+    func canDelete(_ sessionID: String) -> Bool { sessionID != protectedSessionID }
+
     func deleteAll() {
-        for session in sessions {
+        let survivors = sessions.filter { !canDelete($0.id) }
+        for session in sessions where canDelete(session.id) {
             try? FileManager.default.removeItem(at: session.directory)
         }
-        sessions = []
+        sessions = survivors
         RecordingPaths.ensureDirectory(RecordingPaths.recordingsRoot)
         recomputeStorage()
     }

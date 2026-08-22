@@ -92,3 +92,58 @@ final class BridgeAndDeletionTests: XCTestCase {
         XCTAssertEqual(store.pendingSources(from: [pasted]).map(\.id), [id])
     }
 }
+
+/// Deleting the recording that is being written pulls the directory out from
+/// under a live AVAudioFile. The write handle survives on an unlinked file, so
+/// nothing reports an error until the audio is already gone.
+@MainActor
+final class LiveSessionDeletionTests: XCTestCase {
+
+    private func makeSession(_ store: RecordingStore) -> RecordingSession {
+        var s = RecordingSession(id: "protect-\(UUID().uuidString)", startDate: Date(), source: .pasted)
+        s.transcript = "text"
+        s.isComplete = true
+        store.upsert(s)
+        return s
+    }
+
+    func testTheProtectedSessionCannotBeDeleted() {
+        let store = RecordingStore.shared
+        let session = makeSession(store)
+        defer { store.protectedSessionID = nil; store.delete(session) }
+
+        store.protectedSessionID = session.id
+        XCTAssertFalse(store.canDelete(session.id))
+        XCTAssertFalse(store.delete(session))
+        XCTAssertNotNil(store.session(id: session.id), "it is still on disk and still being written")
+    }
+
+    func testDeleteAllSpareTheProtectedSession() {
+        let store = RecordingStore.shared
+        let session = makeSession(store)
+        defer { store.protectedSessionID = nil; store.delete(session) }
+
+        store.protectedSessionID = session.id
+        store.deleteAll()
+        XCTAssertNotNil(store.session(id: session.id))
+    }
+
+    func testTheProtectionLiftsOnceRecordingStops() {
+        let store = RecordingStore.shared
+        let session = makeSession(store)
+        store.protectedSessionID = session.id
+        store.protectedSessionID = nil
+        XCTAssertTrue(store.canDelete(session.id))
+        XCTAssertTrue(store.delete(session))
+        XCTAssertNil(store.session(id: session.id))
+    }
+
+    func testAudioDeletionIsRefusedForTheProtectedSession() {
+        let store = RecordingStore.shared
+        let session = makeSession(store)
+        defer { store.protectedSessionID = nil; store.delete(session) }
+
+        store.protectedSessionID = session.id
+        XCTAssertFalse(store.deleteAudio(session))
+    }
+}

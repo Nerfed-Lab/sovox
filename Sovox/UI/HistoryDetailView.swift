@@ -198,8 +198,14 @@ struct HistoryDetailView: View {
                             .foregroundStyle(SovoxPalette.dim)
                     }
 
-                    GlassActionButton(title: "Delete everything", systemImage: "trash", tint: SovoxPalette.destructive) {
-                        confirmDeleteAll = true
+                    if store.canDelete(session.id) {
+                        GlassActionButton(title: "Delete everything", systemImage: "trash", tint: SovoxPalette.destructive) {
+                            confirmDeleteAll = true
+                        }
+                    } else {
+                        Text("This recording is still running. Stop it before deleting.")
+                            .font(.caption)
+                            .foregroundStyle(SovoxPalette.dim)
                     }
                 }
                 .confirmationDialog("Delete everything?",

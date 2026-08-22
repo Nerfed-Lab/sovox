@@ -174,6 +174,16 @@ request is in flight, still collects the result. Nothing else opens this scheme,
 so the alternative to guessing is an indefinite wait on a result already sitting
 in the file.
 
+**The recording in progress could be deleted out from under the engine.** It
+appears in History as soon as its first segment closes, and nothing stopped a
+swipe delete, a Delete everything, or Settings bulk delete from removing its
+directory while AVAudioFile was still writing into it. An unlinked file keeps a
+valid write handle on iOS, so the audio would have gone nowhere with no error
+raised until the session was already lost. `RecordingStore.protectedSessionID`
+is set when recording starts and cleared on stop, every delete path checks it,
+and the two affordances are simply absent for that session rather than present
+and refusing.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
