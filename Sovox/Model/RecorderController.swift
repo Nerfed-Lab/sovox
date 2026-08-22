@@ -72,8 +72,15 @@ final class RecorderController: SovoxCommandHandler {
         engine.onEvent = { [weak self] event in
             Task { @MainActor in self?.handle(event) }
         }
-        remainingMinutes = StorageGuard.recordableMinutes(freeBytes: StorageGuard.freeBytes(at: RecordingPaths.documents))
+        refreshRemainingMinutes()
         resumeUnfinishedTranscriptions()
+    }
+
+    /// Leaves the last known figure in place when the volume cannot be read,
+    /// rather than reporting zero minutes left.
+    private func refreshRemainingMinutes() {
+        guard let free = StorageGuard.freeBytes(at: RecordingPaths.documents) else { return }
+        remainingMinutes = StorageGuard.recordableMinutes(freeBytes: free)
     }
 
     func setForeground(_ value: Bool) {
@@ -117,8 +124,11 @@ final class RecorderController: SovoxCommandHandler {
         _ = await SegmentTranscriber.requestAuthorisation()
         _ = await Notifier.requestAuthorisation()
 
-        let free = StorageGuard.freeBytes(at: RecordingPaths.documents)
-        guard StorageGuard.canStart(freeBytes: free) else {
+        // Unknown free space allows the start. Refusing on a failed probe would
+        // block the one thing the app exists to do, and the write path already
+        // fails loudly on a disk that is actually full.
+        if let free = StorageGuard.freeBytes(at: RecordingPaths.documents),
+           !StorageGuard.canStart(freeBytes: free) {
             alertMessage = "Only \(StorageGuard.formatted(bytes: free)) free. Sovox needs at least 1 GB before it will start a recording."
             return false
         }
@@ -142,7 +152,7 @@ final class RecorderController: SovoxCommandHandler {
         segmentIndex = 1
         nextRollDate = now.addingTimeInterval(settings.segmentSeconds)
         currentSession = session
-        remainingMinutes = StorageGuard.recordableMinutes(freeBytes: free)
+        refreshRemainingMinutes()
         state = .recording
         settings.sessionsStarted += 1
         store.upsert(session)
@@ -254,7 +264,7 @@ final class RecorderController: SovoxCommandHandler {
             nextRollDate = rollsAt
             // Keeps the Lock Screen figure tracking the session rather than the
             // value read once at launch.
-            remainingMinutes = StorageGuard.recordableMinutes(freeBytes: StorageGuard.freeBytes(at: RecordingPaths.documents))
+            refreshRemainingMinutes()
             activities.update(activityState(), segmentSeconds: settings.segmentSeconds)
 
         case .segmentClosed(let index, let fileName, let duration):
@@ -304,7 +314,7 @@ final class RecorderController: SovoxCommandHandler {
         case .storageRecovered:
             guard lowStorageActive else { return }
             lowStorageActive = false
-            remainingMinutes = StorageGuard.recordableMinutes(freeBytes: StorageGuard.freeBytes(at: RecordingPaths.documents))
+            refreshRemainingMinutes()
             activities.update(activityState(), segmentSeconds: settings.segmentSeconds)
 
         case .storageCritical:

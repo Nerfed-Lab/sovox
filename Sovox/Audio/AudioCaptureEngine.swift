@@ -532,7 +532,9 @@ final class AudioCaptureEngine: NSObject, @unchecked Sendable {
         guard now.timeIntervalSince(lastStorageCheck) >= 5 else { return }
         lastStorageCheck = now
 
-        let free = StorageGuard.freeBytes(at: RecordingPaths.documents)
+        // An unmeasurable volume is not a full one. Skip this round rather than
+        // stop a meeting that is still recording fine.
+        guard let free = StorageGuard.freeBytes(at: RecordingPaths.documents) else { return }
         if StorageGuard.mustStop(freeBytes: free) {
             emit(.storageCritical)
             return
@@ -551,7 +553,8 @@ final class AudioCaptureEngine: NSObject, @unchecked Sendable {
     }
 
     var remainingMinutes: Int {
-        StorageGuard.recordableMinutes(freeBytes: StorageGuard.freeBytes(at: RecordingPaths.documents))
+        StorageGuard.freeBytes(at: RecordingPaths.documents)
+            .map(StorageGuard.recordableMinutes) ?? 0
     }
 
     var currentSegmentIndex: Int {

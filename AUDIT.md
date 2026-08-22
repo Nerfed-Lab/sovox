@@ -110,6 +110,15 @@ audio and no text, and marks the session audio removed once nothing playable is
 left. Per segment retry is gated on that segment's own file rather than the
 session, since a session can lose some of its audio and keep the rest.
 
+**An unreadable volume looked like a full one.** `StorageGuard.freeBytes`
+returned 0 when both probes failed, so a transient measurement failure read as
+zero bytes free: the engine would stop a live meeting and claim free space had
+fallen below 300 MB, and a start would be refused for the same reason. It now
+returns nil for unknown. The engine skips that round and keeps recording, the
+start is allowed, the remaining minutes figure keeps its last known value, and
+Self Test says the space could not be read rather than printing 0 bytes. A disk
+that is genuinely full still fails loudly on the next write.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

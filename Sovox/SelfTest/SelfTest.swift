@@ -183,7 +183,14 @@ final class SelfTest {
     }
 
     private func diskRow() -> SelfTestRow {
-        let free = StorageGuard.freeBytes(at: RecordingPaths.documents)
+        guard let free = StorageGuard.freeBytes(at: RecordingPaths.documents) else {
+            // Say so rather than print 0 bytes free, which reads as a failure
+            // the user cannot act on.
+            return SelfTestRow(id: "disk",
+                               title: "Free space",
+                               passed: false,
+                               detail: "Free space could not be read. Recording is still allowed.")
+        }
         let minutes = StorageGuard.recordableMinutes(freeBytes: free)
         let ok = StorageGuard.canStart(freeBytes: free)
         return SelfTestRow(id: "disk",

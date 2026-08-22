@@ -213,3 +213,31 @@ final class SegmentPruningTests: XCTestCase {
         XCTAssertFalse(s.audioExists(for: s.segments[0]))
     }
 }
+
+/// An unreadable volume must not be mistaken for a full one.
+final class StorageProbeTests: XCTestCase {
+
+    func testAMeasurableVolumeStillReturnsAFigure() {
+        let temp = FileManager.default.temporaryDirectory
+        guard let free = StorageGuard.freeBytes(at: temp) else {
+            return XCTFail("the temporary directory is always measurable")
+        }
+        XCTAssertGreaterThan(free, 0)
+    }
+
+    func testAVolumeThatDoesNotExistReadsAsUnknownRatherThanZero() {
+        let missing = URL(fileURLWithPath: "/dev/null/no/such/volume/\(UUID().uuidString)")
+        let free = StorageGuard.freeBytes(at: missing)
+        XCTAssertNil(free, "zero would read as a full disk and stop a live recording")
+    }
+
+    func testTheHardStopStillFiresOnARealShortage() {
+        XCTAssertTrue(StorageGuard.mustStop(freeBytes: 314_572_799))
+        XCTAssertFalse(StorageGuard.mustStop(freeBytes: StorageGuard.criticalBytes))
+    }
+
+    func testStartIsStillRefusedUnderAGigabyte() {
+        XCTAssertFalse(StorageGuard.canStart(freeBytes: StorageGuard.minimumStartBytes - 1))
+        XCTAssertTrue(StorageGuard.canStart(freeBytes: StorageGuard.minimumStartBytes))
+    }
+}

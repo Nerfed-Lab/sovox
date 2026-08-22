@@ -34,10 +34,18 @@ enum StorageGuard {
         Int64(max(0, seconds)) * bytesPerSecond
     }
 
-    /// Live figure for the volume backing the given directory.
+    /// Live figure for the volume backing the given directory, or nil when the
+    /// volume cannot be measured at all.
+    ///
+    /// nil is not zero. Returning zero made an unreadable volume look like a
+    /// full one, which stops a live recording mid meeting and tells the user
+    /// free space fell below 300 MB when it may not have. Callers treat nil as
+    /// unknown and leave the recording running: a genuinely full disk still
+    /// fails loudly on the next write.
+    ///
     /// volumeAvailableCapacityForImportantUsage is the value that accounts for
     /// purgeable space, which is what the system will actually let us write.
-    static func freeBytes(at url: URL) -> Int64 {
+    static func freeBytes(at url: URL) -> Int64? {
         do {
             let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             if let important = values.volumeAvailableCapacityForImportantUsage {
@@ -50,7 +58,7 @@ enum StorageGuard {
            let free = attrs[.systemFreeSize] as? NSNumber {
             return free.int64Value
         }
-        return 0
+        return nil
     }
 
     static func formatted(bytes: Int64) -> String {
