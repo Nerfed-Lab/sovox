@@ -83,7 +83,7 @@ final class TodoStore {
         sessions
             .filter { session in
                 if session.source == .pasted { return !session.transcript.isEmpty }
-                return session.isComplete && session.isTranscribed && !session.stitchedTranscript.isEmpty
+                return session.isComplete && session.isTranscribed && session.hasTranscribedContent
             }
             .filter { !ingestedRecordingIDs.contains($0.id) }
             .sorted { $0.startDate < $1.startDate }

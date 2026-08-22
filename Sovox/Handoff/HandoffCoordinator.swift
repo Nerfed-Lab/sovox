@@ -176,6 +176,15 @@ final class HandoffCoordinator {
             phase = .failed("Pick at least one output type.")
             return
         }
+        // Placeholders are not a transcript. Handing them over produces notes
+        // for a meeting nobody heard, in a draft addressed to a real work
+        // address.
+        guard session.hasTranscribedContent else {
+            phase = .failed(session.failedSegments.isEmpty
+                            ? "There is no transcript yet."
+                            : "Every segment failed to transcribe, so there is nothing to send. Retry them from the recording first.")
+            return
+        }
 
         self.destination = destination
         self.sessionID = session.id

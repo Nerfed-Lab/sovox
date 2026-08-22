@@ -61,6 +61,23 @@ enum TranscriptStitcher {
         return out
     }
 
+    /// The transcript with the app's own scaffolding taken out: the segment
+    /// markers and the placeholders that stand in for segments which failed.
+    /// What is left is what a person actually said.
+    static func spokenContent(_ transcript: String) -> String {
+        transcript
+            .components(separatedBy: .newlines)
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty { return false }
+                if trimmed.hasPrefix("--- [segment "), trimmed.hasSuffix("---") { return false }
+                if trimmed.hasPrefix("[segment "), trimmed.hasSuffix("could not be transcribed]") { return false }
+                return true
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// First non empty line, used for the History list subtitle.
     static func preview(_ transcript: String, limit: Int = 120) -> String {
         let line = transcript

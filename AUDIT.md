@@ -252,6 +252,17 @@ the only way the app can say anything at all, including that recording stopped
 for lack of space. Both are rows now, the bridge row offers Setup as its fix,
 and the checks come from one enum so a check cannot quietly drop out of the run.
 
+**Notes could be generated from a transcript of nothing.** When every segment
+fails, the stitched transcript is a run of `[segment N could not be
+transcribed]` placeholders, which is not empty, so `generate` passed it
+straight to the model. The model would then write notes for a meeting nobody
+heard and the app would open a draft addressed to the user's real work address.
+`hasTranscribedContent` strips the app's own markers and placeholders and asks
+whether anything a person said is left. Generation refuses without it and names
+retry as the way out, and the to-do refresh no longer treats a placeholder only
+session as a source. The placeholders themselves stay in the transcript the user
+reads: a stated gap is the point.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

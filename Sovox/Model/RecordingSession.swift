@@ -183,6 +183,14 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
         return stitched
     }
 
+    /// True when the transcript holds something somebody actually said, rather
+    /// than only the placeholders that stand in for segments which failed.
+    /// Generating notes from placeholders alone means asking a model to
+    /// summarise a meeting it never heard, and it will oblige.
+    var hasTranscribedContent: Bool {
+        !TranscriptStitcher.spokenContent(stitchedTranscript).isEmpty
+    }
+
     /// Title precedence, used everywhere including the email subject:
     /// the user's own name, then the AI subject, then the date.
     /// A title has to survive three places: a list row, the Outlook subject, and
