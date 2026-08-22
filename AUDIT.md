@@ -100,6 +100,16 @@ first, with a title fallback used only when there is no id and only when exactly
 one recording matches. An id that is set and does not resolve still refuses to
 rebind, because that means the recording was deleted.
 
+**A transcript could be erased by deleting a file in Files.** Documents is user
+visible, which the spec requires, so a .m4a can disappear without the app
+hearing about it. `reconcile` dropped any segment whose audio was missing, took
+its transcript with it, and the next persist made that permanent. Notes would
+then have been generated from half a meeting with nothing on screen to say so.
+Pruning now keeps any segment that produced text, discards only the ones with no
+audio and no text, and marks the session audio removed once nothing playable is
+left. Per segment retry is gated on that segment's own file rather than the
+session, since a session can lose some of its audio and keep the rest.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

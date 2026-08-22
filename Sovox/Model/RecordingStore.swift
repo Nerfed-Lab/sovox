@@ -53,18 +53,17 @@ final class RecordingStore {
         recomputeStorage()
     }
 
-    /// Drops segments whose audio no longer exists and picks up segments that
-    /// exist on disk but never made it into the manifest, which is exactly the
-    /// state a force quit produces.
+    /// Reconciles a manifest against what is actually on disk, and picks up
+    /// segments that exist on disk but never made it into the manifest, which is
+    /// exactly the state a force quit produces.
     private func reconcile(_ session: RecordingSession) -> RecordingSession {
         guard session.source == .recorded else { return session }
         // Audio deleted on purpose is not a corrupt session. Keeping the segment
         // records is what preserves the transcript, the title and the to-do links.
         guard !session.audioRemoved else { return session }
-        var updated = session
         let fm = FileManager.default
-        updated.segments = session.segments.filter {
-            fm.fileExists(atPath: session.directory.appendingPathComponent($0.fileName).path)
+        var updated = RecordingStore.pruneSegments(session) {
+            fm.fileExists(atPath: session.directory.appendingPathComponent($0).path)
         }
         let known = Set(updated.segments.map(\.fileName))
         if let files = try? fm.contentsOfDirectory(at: session.directory, includingPropertiesForKeys: nil) {
@@ -80,6 +79,33 @@ final class RecordingStore {
             }
         }
         updated.segments.sort { $0.index < $1.index }
+        return updated
+    }
+
+    /// Documents is visible in Files, so a user can delete a .m4a without the
+    /// app ever hearing about it. A segment that already produced text is kept
+    /// even when its audio is gone: dropping the record would take the
+    /// transcript with it, and the next persist would make that permanent.
+    /// Only a segment with no audio and no text is discarded, which is the
+    /// force quit leftover this was written for.
+    ///
+    /// Pure so it can be tested without touching the file system.
+    nonisolated static func pruneSegments(_ session: RecordingSession,
+                                          audioExists: (String) -> Bool) -> RecordingSession {
+        var updated = session
+        var anyAudioLeft = false
+        updated.segments = session.segments.filter { segment in
+            if audioExists(segment.fileName) {
+                anyAudioLeft = true
+                return true
+            }
+            return !segment.text.isEmpty
+        }
+        // Nothing playable is left, so stop claiming otherwise. This is what
+        // takes away share, retry and the delete audio row.
+        if !anyAudioLeft, !updated.segments.isEmpty {
+            updated.audioRemoved = true
+        }
         return updated
     }
 

@@ -54,7 +54,7 @@ struct HistoryDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if segment.state.isFailure, session.hasAudio {
+            if segment.state.isFailure, session.audioExists(for: segment) {
                 Button("Retry") {
                     recorder.retrySegment(sessionID: session.id, index: segment.index)
                 }

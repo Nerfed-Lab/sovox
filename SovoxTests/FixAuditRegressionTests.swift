@@ -155,3 +155,61 @@ final class TodoSourceResolutionTests: XCTestCase {
         XCTAssertNil(todo(id: nil, title: nil).source(in: [recording("a", "x")]))
     }
 }
+
+/// Documents is user visible in Files. A .m4a can therefore disappear while the
+/// transcript that came out of it is the only remaining copy of that meeting.
+final class SegmentPruningTests: XCTestCase {
+
+    private func session(_ segments: [(String, String)]) -> RecordingSession {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.segments = segments.enumerated().map { index, pair in
+            SegmentRecord(index: index + 1,
+                          fileName: pair.0,
+                          duration: 60,
+                          state: pair.1.isEmpty ? .pending : .done,
+                          text: pair.1)
+        }
+        return s
+    }
+
+    func testASegmentWithTextSurvivesItsAudioVanishing() {
+        let s = session([("seg-01.m4a", "first half"), ("seg-02.m4a", "second half")])
+        let pruned = RecordingStore.pruneSegments(s) { $0 == "seg-02.m4a" }
+        XCTAssertEqual(pruned.segments.count, 2, "dropping it would erase the transcript")
+        XCTAssertEqual(pruned.stitchedTranscript.contains("first half"), true)
+    }
+
+    func testAnEmptySegmentWithNoAudioIsDiscarded() {
+        let s = session([("seg-01.m4a", "kept"), ("seg-02.m4a", "")])
+        let pruned = RecordingStore.pruneSegments(s) { $0 == "seg-01.m4a" }
+        XCTAssertEqual(pruned.segments.map(\.fileName), ["seg-01.m4a"])
+    }
+
+    func testLosingEveryFileMarksTheSessionAsAudioRemoved() {
+        let s = session([("seg-01.m4a", "words"), ("seg-02.m4a", "more words")])
+        let pruned = RecordingStore.pruneSegments(s) { _ in false }
+        XCTAssertTrue(pruned.audioRemoved, "stop offering share and retry for audio that is gone")
+        XCTAssertFalse(pruned.hasAudio)
+        XCTAssertEqual(pruned.segments.count, 2)
+    }
+
+    func testKeepingOneFileLeavesTheSessionPlayable() {
+        let s = session([("seg-01.m4a", "words"), ("seg-02.m4a", "more words")])
+        let pruned = RecordingStore.pruneSegments(s) { $0 == "seg-01.m4a" }
+        XCTAssertFalse(pruned.audioRemoved)
+        XCTAssertTrue(pruned.hasAudio)
+    }
+
+    func testNothingIsMarkedRemovedWhenThereWereNoSegments() {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        XCTAssertFalse(RecordingStore.pruneSegments(s) { _ in false }.audioRemoved)
+    }
+
+    func testAudioExistsIsFalseOnceTheSessionSaysTheAudioIsGone() {
+        var s = session([("seg-01.m4a", "words")])
+        s.audioRemoved = true
+        XCTAssertFalse(s.audioExists(for: s.segments[0]))
+    }
+}

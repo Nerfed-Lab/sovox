@@ -110,6 +110,15 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
 
     var hasAudio: Bool { source == .recorded && !audioRemoved && !segments.isEmpty }
 
+    /// Whether this one segment still has its .m4a. Checked per row because a
+    /// session can lose some of its audio and keep the rest, and a retry that
+    /// has no file to read can never succeed.
+    func audioExists(for segment: SegmentRecord) -> Bool {
+        guard hasAudio else { return false }
+        return FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent(segment.fileName).path)
+    }
+
     /// Every segment actually produced text. Distinct from isTranscribed, which
     /// only means nothing is still in flight: a permanently failed segment is
     /// terminal but has no text.
