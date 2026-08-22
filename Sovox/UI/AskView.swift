@@ -46,7 +46,7 @@ struct AskView: View {
 
     private var sources: [AskPromptBuilder.Source] {
         selectedSessions.map {
-            AskPromptBuilder.Source(title: $0.displayTitle,
+            AskPromptBuilder.Source(title: $0.promptSafeTitle,
                                     date: $0.dateLine,
                                     transcript: $0.stitchedTranscript)
         }

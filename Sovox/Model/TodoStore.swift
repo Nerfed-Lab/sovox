@@ -142,7 +142,7 @@ enum TodoPromptBuilder {
         }
 
         let transcripts = sources.map {
-            "=== \($0.displayTitle) (\($0.dateLine)) ===\n" + PromptBuilder.fenced($0.stitchedTranscript)
+            "=== \($0.promptSafeTitle) (\($0.dateLine)) ===\n" + PromptBuilder.fenced($0.stitchedTranscript)
         }.joined(separator: "\n\n")
 
         return """

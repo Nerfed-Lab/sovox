@@ -213,6 +213,16 @@ active now collects a result that is already sitting in the file: only when it
 exists and belongs to the current request, so returning to the app while the
 model is still thinking cannot cancel a request that is still alive.
 
+**The AI subject was stored raw and became the title everywhere.** It is model
+output shaped by whatever was said in the meeting, and it is printed outside the
+fenced transcript in the Ask and to-do prompt headers. A topic carrying a
+newline and a run of dashes could therefore read as the end of a fence, letting
+the rest of the header line pose as instruction, and a paragraph long topic
+broke list rows. `RecordingSession.cleanTitle` collapses whitespace, strips the
+subject separator, flattens dash and equals runs and clips to the subject limit.
+It runs when the subject is stored and when the user renames, and
+`promptSafeTitle` cleans whatever an older build already wrote.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

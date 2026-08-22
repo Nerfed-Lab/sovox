@@ -155,7 +155,7 @@ final class RecordingStore {
     /// A rename is sticky and never re-triggers generation.
     func rename(sessionID: String, to title: String) {
         guard var session = session(id: sessionID) else { return }
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = RecordingSession.cleanTitle(title)
         session.userTitle = trimmed.isEmpty ? nil : trimmed
         upsert(session)
     }

@@ -432,8 +432,11 @@ final class HandoffCoordinator {
         // The model's SUBJECT is stored, but a user title outranks it and is
         // never overwritten by a regeneration.
         var updated = session
-        if !parsed.topic.trimmingCharacters(in: .whitespaces).isEmpty {
-            updated.aiSubject = parsed.topic
+        // The topic is model output, shaped by whatever was said in the
+        // meeting, and it becomes the recording's title everywhere.
+        let topic = RecordingSession.cleanTitle(parsed.topic)
+        if !topic.isEmpty {
+            updated.aiSubject = topic
         }
         store.upsert(updated)
 

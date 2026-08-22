@@ -185,6 +185,24 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
 
     /// Title precedence, used everywhere including the email subject:
     /// the user's own name, then the AI subject, then the date.
+    /// A title has to survive three places: a list row, the Outlook subject, and
+    /// the header line that sits outside the fenced transcript in the Ask and
+    /// to-do prompts. A newline or a run of dashes there is at best a broken
+    /// row and at worst something a model reads as the end of the fence.
+    static func cleanTitle(_ raw: String) -> String {
+        var cleaned = ResponseParser.collapseWhitespace(raw.replacingOccurrences(of: "|", with: " "))
+        while cleaned.contains("--") {
+            cleaned = cleaned.replacingOccurrences(of: "--", with: "-")
+        }
+        while cleaned.contains("==") {
+            cleaned = cleaned.replacingOccurrences(of: "==", with: "=")
+        }
+        return SubjectBuilder.clip(cleaned, to: SubjectBuilder.maxTopicCharacters)
+    }
+
+    /// The title as it may appear next to untrusted text.
+    var promptSafeTitle: String { RecordingSession.cleanTitle(displayTitle) }
+
     var displayTitle: String {
         if let userTitle, !userTitle.trimmingCharacters(in: .whitespaces).isEmpty {
             return userTitle
