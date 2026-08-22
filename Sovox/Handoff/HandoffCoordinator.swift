@@ -344,6 +344,19 @@ final class HandoffCoordinator {
         return pendingTodoResponse
     }
 
+    /// Which flow a returning result belongs to, read from the persisted record
+    /// so it survives a relaunch, and read before collecting because collecting
+    /// clears it.
+    ///
+    /// Sending every callback to the Record tab meant a user who asked a
+    /// question came back to a screen with no sign of an answer. The answer was
+    /// never lost, it just sat there until they happened to open Ask.
+    var returningPurpose: BridgePurpose {
+        let stored = UserDefaults.standard.string(forKey: Keys.purpose)
+            .flatMap(BridgePurpose.init(rawValue:))
+        return stored ?? purpose
+    }
+
     /// Safe to call from a freshly created view. Falls back to the persisted
     /// pair so an answer that arrived while the Ask tab did not exist is still
     /// delivered. Cleared only once the caller has committed it.

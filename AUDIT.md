@@ -303,6 +303,14 @@ action is an output: `hasRequestedOutput` accepts either, and the assembled
 prompt still carries the two header lines and the precedence reassertion with no
 built in sections at all.
 
+**Every callback landed on the Record tab.** Ask, to-dos and Verify all return
+through the same `sovox://done`, and the handler switched to Record regardless.
+An answer to a question was therefore delivered to a screen that does not show
+it: not lost, since the Ask tab drains the stranded pair when it next appears,
+but invisible until the user happened to go looking. The purpose is read from
+the persisted record before collecting clears it, so the flow the user started
+is the flow they come back to, and it survives a relaunch.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

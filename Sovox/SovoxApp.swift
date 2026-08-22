@@ -6,6 +6,17 @@ enum AppTab: Hashable {
     case ask
     case todos
     case settings
+
+    /// Where a returning bridge result should land the user. The flow they
+    /// started is the flow they should come back to.
+    static func forResult(of purpose: BridgePurpose) -> AppTab {
+        switch purpose {
+        case .notes: return .record
+        case .ask: return .ask
+        case .todos: return .todos
+        case .verify, .safety: return .settings
+        }
+    }
 }
 
 @main
@@ -61,10 +72,12 @@ struct SovoxApp: App {
     private func handle(_ url: URL) {
         switch SovoxURL.route(for: url, isInFlight: handoff.isInFlight) {
         case .collectResult:
-            tab = .record
+            // Read before collecting: collecting clears the record of which
+            // flow this belongs to.
+            tab = AppTab.forResult(of: handoff.returningPurpose)
             Task { await handoff.collectResult(settings: settings, store: store) }
         case .reportFailure:
-            tab = .record
+            tab = AppTab.forResult(of: handoff.returningPurpose)
             handoff.handleFailure()
         case .openRecording:
             tab = .record

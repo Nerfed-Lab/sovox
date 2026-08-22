@@ -133,3 +133,34 @@ final class AskHistoryBudgetTests: XCTestCase {
         XCTAssertTrue(prompt.contains("q2"))
     }
 }
+
+/// Every callback landed on the Record tab, so an Ask answer arrived on a screen
+/// that does not show it.
+final class ResultRoutingTests: XCTestCase {
+
+    func testEachFlowComesBackToItsOwnTab() {
+        XCTAssertEqual(AppTab.forResult(of: .notes), .record)
+        XCTAssertEqual(AppTab.forResult(of: .ask), .ask)
+        XCTAssertEqual(AppTab.forResult(of: .todos), .todos)
+    }
+
+    func testTheSetupFlowsComeBackToSettings() {
+        XCTAssertEqual(AppTab.forResult(of: .verify), .settings)
+        XCTAssertEqual(AppTab.forResult(of: .safety), .settings,
+                       "both are run from Settings, Setup")
+    }
+
+    @MainActor
+    func testTheReturningPurposeSurvivesARelaunch() {
+        let defaults = UserDefaults.standard
+        let key = "sovox.handoff.purpose"
+        let previous = defaults.string(forKey: key)
+        defer {
+            if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        // What a jetsam leaves behind: the record on disk, nothing in memory.
+        defaults.set(BridgePurpose.ask.rawValue, forKey: key)
+        XCTAssertEqual(HandoffCoordinator.shared.returningPurpose, .ask)
+        XCTAssertEqual(AppTab.forResult(of: HandoffCoordinator.shared.returningPurpose), .ask)
+    }
+}
