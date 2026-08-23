@@ -331,6 +331,17 @@ unverified forever, which the new Self Test row would then report as broken.
 Marking moved into the coordinator, at the point where the reply is actually
 read as OK, so it does not depend on any view being on screen.
 
+**The to-do refresh had the durability bug the Ask tab already had fixed.** The
+list of recordings sent to the model lived in `@State` on the To-dos tab, and
+the reply was delivered only through an `onChange`. The round trip leaves the
+app entirely, so a jetsam meant the reply arrived with an empty source list: the
+watermark could not advance, every one of those recordings would be proposed
+again on the next refresh as duplicates, and the accepted to-dos were created
+with no source id. If the tab had not been created yet, the `onChange` could not
+fire at all and the reply sat unread. Both halves now persist with the in flight
+record, `consumeTodoResponse` returns the reply together with its source ids,
+and the tab drains from a `task` as well as an `onChange`.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

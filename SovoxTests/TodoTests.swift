@@ -150,3 +150,55 @@ final class TodoTests: XCTestCase {
         XCTAssertEqual(ordered.first?.id, high.id)
     }
 }
+
+/// The list of recordings that went into a refresh lived in view state, and the
+/// reply did too. Both are lost if the app is killed during the round trip,
+/// which leaves the app entirely.
+@MainActor
+final class TodoRefreshDurabilityTests: XCTestCase {
+
+    private let responseKey = "sovox.handoff.strandedTodos"
+    private let sourcesKey = "sovox.handoff.todoSources"
+
+    private func clear() {
+        UserDefaults.standard.removeObject(forKey: responseKey)
+        UserDefaults.standard.removeObject(forKey: sourcesKey)
+    }
+
+    func testAReplyThatArrivedBeforeTheTabExistedIsStillDelivered() {
+        clear()
+        defer { clear() }
+        // What a relaunch looks like: nothing in memory, the record on disk.
+        UserDefaults.standard.set("ADD | finalise pricing | high | Budget call | ctx", forKey: responseKey)
+        UserDefaults.standard.set(["sovox-1", "sovox-2"], forKey: sourcesKey)
+
+        let result = HandoffCoordinator.shared.consumeTodoResponse()
+        XCTAssertEqual(result?.sourceIDs, ["sovox-1", "sovox-2"],
+                       "the watermark has to advance against the set that was actually sent")
+        XCTAssertTrue(result?.raw.hasPrefix("ADD |") ?? false)
+    }
+
+    func testConsumingClearsBothHalves() {
+        clear()
+        defer { clear() }
+        UserDefaults.standard.set("NONE", forKey: responseKey)
+        UserDefaults.standard.set(["sovox-1"], forKey: sourcesKey)
+
+        _ = HandoffCoordinator.shared.consumeTodoResponse()
+        XCTAssertNil(HandoffCoordinator.shared.consumeTodoResponse(), "a reply is delivered once")
+        XCTAssertNil(UserDefaults.standard.string(forKey: responseKey))
+        XCTAssertNil(UserDefaults.standard.stringArray(forKey: sourcesKey))
+    }
+
+    func testNothingWaitingReturnsNil() {
+        clear()
+        XCTAssertNil(HandoffCoordinator.shared.consumeTodoResponse())
+    }
+
+    func testAnEmptyReplyIsNotTreatedAsAReply() {
+        clear()
+        defer { clear() }
+        UserDefaults.standard.set("", forKey: responseKey)
+        XCTAssertNil(HandoffCoordinator.shared.consumeTodoResponse())
+    }
+}

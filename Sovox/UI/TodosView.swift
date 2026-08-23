@@ -14,7 +14,6 @@ struct TodosView: View {
     /// recording that finished transcribing during the round trip be marked
     /// ingested without ever having been in the prompt, losing its to-dos for
     /// good since there is no way to rewind the watermark.
-    @State private var sentSourceIDs: [String] = []
 
     var body: some View {
         NavigationStack {
@@ -73,10 +72,8 @@ struct TodosView: View {
             } message: {
                 Text(message ?? "")
             }
-            .onChange(of: handoff.pendingTodoResponse) { _, _ in
-                guard let raw = handoff.consumeTodoResponse() else { return }
-                receive(raw)
-            }
+            .onChange(of: handoff.pendingTodoResponse) { _, _ in drainResponse() }
+            .task { drainResponse() }
         }
     }
 
@@ -125,6 +122,13 @@ struct TodosView: View {
         }
     }
 
+    /// Drains from a task as well as an onChange. A reply that arrived before
+    /// this view existed never fires an onChange.
+    private func drainResponse() {
+        guard let result = handoff.consumeTodoResponse() else { return }
+        receive(result.raw, consumed: result.sourceIDs)
+    }
+
     // MARK: Refresh
 
     private func refresh() {
@@ -133,13 +137,12 @@ struct TodosView: View {
             message = "No new recordings since last refresh."
             return
         }
-        sentSourceIDs = sources.map(\.id)
+        let ids = sources.map(\.id)
         let prompt = TodoPromptBuilder.build(open: todos.open, sources: sources)
-        handoff.refreshTodos(prompt: prompt, destination: settings.destination)
+        handoff.refreshTodos(prompt: prompt, destination: settings.destination, sourceIDs: ids)
     }
 
-    private func receive(_ raw: String) {
-        let consumed = sentSourceIDs
+    private func receive(_ raw: String, consumed: [String]) {
         let parsed = TodoOperationParser.parse(raw, knownIDs: todos.items.map(\.id))
 
         if parsed.isNone {

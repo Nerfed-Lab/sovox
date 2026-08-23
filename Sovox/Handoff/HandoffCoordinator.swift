@@ -97,6 +97,8 @@ final class HandoffCoordinator {
         static let question = "sovox.handoff.question"
         static let strandedAnswer = "sovox.handoff.strandedAnswer"
         static let strandedQuestion = "sovox.handoff.strandedQuestion"
+        static let strandedTodos = "sovox.handoff.strandedTodos"
+        static let todoSources = "sovox.handoff.todoSources"
     }
 
     private init() {
@@ -305,7 +307,7 @@ final class HandoffCoordinator {
     }
 
     /// Phase 9. Same bridge again.
-    func refreshTodos(prompt: String, destination: AIDestination) {
+    func refreshTodos(prompt: String, destination: AIDestination, sourceIDs: [String] = []) {
         guard !isInFlight else {
             busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
@@ -330,6 +332,11 @@ final class HandoffCoordinator {
         self.purpose = .todos
         self.sessionID = nil
         self.pendingTodoResponse = nil
+        // Which recordings went into this prompt, on disk rather than in the
+        // view. The round trip leaves the app entirely, and a view held list
+        // comes back empty after a jetsam: the watermark would never advance
+        // and every one of those recordings would be proposed again.
+        UserDefaults.standard.set(sourceIDs, forKey: Keys.todoSources)
         requestStartedAt = Date()
         persistInFlightRequest()
         phase = .waitingForBridge
@@ -339,9 +346,18 @@ final class HandoffCoordinator {
         }
     }
 
-    func consumeTodoResponse() -> String? {
-        defer { pendingTodoResponse = nil }
-        return pendingTodoResponse
+    /// Safe to call from a freshly created view. Returns the reply together
+    /// with the recordings that produced it, so the watermark advances against
+    /// the right set even after a relaunch.
+    func consumeTodoResponse() -> (raw: String, sourceIDs: [String])? {
+        let defaults = UserDefaults.standard
+        let raw = pendingTodoResponse ?? defaults.string(forKey: Keys.strandedTodos)
+        guard let raw, !raw.isEmpty else { return nil }
+        let sources = defaults.stringArray(forKey: Keys.todoSources) ?? []
+        pendingTodoResponse = nil
+        defaults.removeObject(forKey: Keys.strandedTodos)
+        defaults.removeObject(forKey: Keys.todoSources)
+        return (raw, sources)
     }
 
     /// Which flow a returning result belongs to, read from the persisted record
@@ -432,7 +448,12 @@ final class HandoffCoordinator {
         }
 
         if purpose == .todos {
-            pendingTodoResponse = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Persisted for the same reason as the Ask answer: the To-dos tab
+            // may not exist yet when this arrives, and an onChange cannot fire
+            // for a value that was set before the view was created.
+            UserDefaults.standard.set(trimmed, forKey: Keys.strandedTodos)
+            pendingTodoResponse = trimmed
             clearInFlightRequest()
             phase = .idle
             return
