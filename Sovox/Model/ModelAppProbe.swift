@@ -25,22 +25,36 @@ enum ModelAppAvailability: Equatable, Sendable {
     }
 }
 
+@MainActor
 enum ModelAppProbe {
 
     /// Flipped on once a probe has returned true for a scheme on a real device,
     /// which is proof the scheme string is right. Until then a negative is
     /// ambiguous and the wizard offers both.
-    private static let verifiedKey = "sovox.modelSchemeVerified"
+    /// Per scheme, not one flag for both. A scheme that has been seen to work
+    /// says nothing about the other one: if the claude string were wrong, a
+    /// confirmed chatgpt would make claude look definitively absent, and the
+    /// user would be locked out of a model they have installed. 15a forbids
+    /// exactly that.
+    private static func verifiedKey(_ destination: AIDestination) -> String {
+        "sovox.modelSchemeVerified.\(destination.rawValue)"
+    }
 
     static func isInstalled(_ destination: AIDestination) -> Bool {
         guard let url = URL(string: "\(destination.appScheme)://") else { return false }
         let installed = UIApplication.shared.canOpenURL(url)
-        if installed { UserDefaults.standard.set(true, forKey: verifiedKey) }
+        if installed { UserDefaults.standard.set(true, forKey: verifiedKey(destination)) }
         return installed
     }
 
+    static func schemeConfirmed(_ destination: AIDestination) -> Bool {
+        UserDefaults.standard.bool(forKey: verifiedKey(destination))
+    }
+
+    /// Only when every scheme has proven itself at least once is a clean sweep
+    /// of negatives believable.
     static var schemesEverConfirmed: Bool {
-        UserDefaults.standard.bool(forKey: verifiedKey)
+        AIDestination.allCases.allSatisfy(schemeConfirmed)
     }
 
     /// Re-probed on every call. Apps get installed after first launch, and a

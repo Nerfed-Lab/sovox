@@ -118,6 +118,27 @@ final class ModelAppProbeTests: XCTestCase {
         XCTAssertFalse(ModelAppAvailability.unknown.detectedAny)
     }
 
+    func testOneConfirmedSchemeDoesNotVouchForTheOther() {
+        // A right scheme must not make a wrong one look definitively absent:
+        // that greys out a model the user has installed, with no way back.
+        let defaults = UserDefaults.standard
+        for destination in AIDestination.allCases {
+            defaults.removeObject(forKey: "sovox.modelSchemeVerified.\(destination.rawValue)")
+        }
+        defer {
+            for destination in AIDestination.allCases {
+                defaults.removeObject(forKey: "sovox.modelSchemeVerified.\(destination.rawValue)")
+            }
+        }
+        defaults.set(true, forKey: "sovox.modelSchemeVerified.chatgpt")
+
+        XCTAssertTrue(ModelAppProbe.schemeConfirmed(.chatgpt))
+        XCTAssertFalse(ModelAppProbe.schemeConfirmed(.claude),
+                       "claude has never been seen to work, so a false probe for it is unknown")
+        XCTAssertFalse(ModelAppProbe.schemesEverConfirmed,
+                       "a clean sweep of negatives is only believable once every scheme has proven itself")
+    }
+
     func testUnknownIsDistinctFromNone() {
         XCTAssertNotEqual(ModelAppAvailability.unknown, ModelAppAvailability.none)
         XCTAssertFalse(ModelAppAvailability.none.detectedAny)

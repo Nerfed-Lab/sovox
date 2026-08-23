@@ -30,7 +30,9 @@ struct SettingsView: View {
     /// selection that fails later with nothing to act on.
     @ViewBuilder
     private func handoffRow(_ option: AIDestination, settings: AppSettings) -> some View {
-        let installed = modelApps.contains(option) || !ModelAppProbe.schemesEverConfirmed
+        // Unknown counts as installed, per destination: never grey out a model
+        // on the strength of a probe that has never been proven for it.
+        let installed = modelApps.contains(option) || !ModelAppProbe.schemeConfirmed(option)
         let configured = installed && settings.isBridgeVerified(option)
         let selected = settings.destination == option
 
@@ -42,8 +44,8 @@ struct SettingsView: View {
             settings.destination = option
         } label: {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: selected && configured ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(configured ? SovoxPalette.accent : SovoxPalette.dim)
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected && configured ? SovoxPalette.accent : SovoxPalette.dim)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.title)
                         .foregroundStyle(installed ? SovoxPalette.ink : SovoxPalette.dim)
@@ -227,7 +229,7 @@ struct SettingsView: View {
                 recorder.applySegmentLength()
             }
             .sheet(isPresented: $showWizard) { SetupWizardView() }
-            .sheet(item: $wizardBridge) { _ in SetupWizardView() }
+            .sheet(item: $wizardBridge) { bridge in SetupWizardView(startingBridge: bridge) }
             .onAppear { modelApps = Set(AIDestination.allCases.filter { ModelAppProbe.isInstalled($0) }) }
             .navigationTitle("Settings")
             .confirmationDialog("Delete all audio?",

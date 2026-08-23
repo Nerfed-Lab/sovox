@@ -11,6 +11,11 @@ import UserNotifications
 /// exactly has its own Copy button, and Verify proves the round trip rather
 /// than leaving them to find out during a real meeting.
 struct SetupWizardView: View {
+    /// Set when the user tapped Set up next to a specific model in Settings.
+    /// Without it the wizard re-derives a bridge and can walk them through the
+    /// other one, which is not what they asked for.
+    var startingBridge: AIDestination?
+
     @Environment(AppSettings.self) private var settings
     @Environment(HandoffCoordinator.self) private var handoff
     @Environment(\.dismiss) private var dismiss
@@ -50,6 +55,7 @@ struct SetupWizardView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
             }
+            .onAppear { if startingBridge != nil, step == 0 { step = 2 } }
             .navigationTitle("Setup")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -145,6 +151,11 @@ struct SetupWizardView: View {
 
     private func refreshAvailability() {
         availability = ModelAppProbe.availability()
+        if let startingBridge, chosenBridge == nil {
+            chosenBridge = startingBridge
+            settings.destination = startingBridge
+            return
+        }
         if case .only(let destination) = availability {
             chosenBridge = destination
             settings.destination = destination
