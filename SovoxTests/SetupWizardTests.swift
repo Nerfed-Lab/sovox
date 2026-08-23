@@ -130,3 +130,42 @@ final class SelfTestCoverageTests: XCTestCase {
                        SelfTest.Check.allCases.count)
     }
 }
+
+/// Verification used to be recorded in a view's onAppear, which does not run
+/// again when a failed verify is retried and succeeds.
+@MainActor
+final class BridgeVerificationRecordingTests: XCTestCase {
+
+    func testMarkingIsIdempotentAndPerDestination() {
+        let settings = AppSettings.shared
+        let before = settings.verifiedBridges
+        defer { settings.verifiedBridges = before }
+
+        settings.verifiedBridges = []
+        settings.markBridgeVerified(.chatgpt)
+        settings.markBridgeVerified(.chatgpt)
+        XCTAssertTrue(settings.isBridgeVerified(.chatgpt))
+        XCTAssertFalse(settings.isBridgeVerified(.claude), "verifying one says nothing about the other")
+        XCTAssertEqual(settings.verifiedBridges.count, 1)
+    }
+
+    func testVerificationSurvivesARelaunch() {
+        let settings = AppSettings.shared
+        let before = settings.verifiedBridges
+        defer { settings.verifiedBridges = before }
+
+        settings.verifiedBridges = []
+        settings.markBridgeVerified(.claude)
+        let persisted = UserDefaults.standard.stringArray(forKey: "sovox.verifiedBridges") ?? []
+        XCTAssertTrue(persisted.contains(AIDestination.claude.rawValue))
+    }
+
+    func testTheSelfTestBridgeRowFollowsTheRecordedState() {
+        let settings = AppSettings.shared
+        let before = settings.verifiedBridges
+        defer { settings.verifiedBridges = before }
+
+        settings.verifiedBridges = [settings.destination.rawValue]
+        XCTAssertTrue(settings.isBridgeVerified(settings.destination))
+    }
+}

@@ -322,6 +322,15 @@ the URL scheme is exactly `sovox` with `shortcuts` and `ms-outlook` queryable,
 which is the string set the rename broke once; and every
 `PRODUCT_BUNDLE_IDENTIFIER` still sits under `com.rishabh.capturenotes`.
 
+**A retried verify never recorded itself.** The wizard marked the bridge
+verified from the outcome label's `onAppear`. That runs when the label is
+inserted, so it fired on the first failure, and the retry that succeeded updated
+the same label without running it again. The ordinary path, get it wrong, fix
+the Shortcut, verify again, therefore left a working bridge recorded as
+unverified forever, which the new Self Test row would then report as broken.
+Marking moved into the coordinator, at the point where the reply is actually
+read as OK, so it does not depend on any view being on screen.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

@@ -154,9 +154,6 @@ struct SetupWizardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
                     .glassCard(cornerRadius: 14)
-                    .onAppear {
-                        if outcome == .success { settings.markBridgeVerified(destination) }
-                    }
             }
         }
     }

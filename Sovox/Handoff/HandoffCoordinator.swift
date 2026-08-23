@@ -417,6 +417,12 @@ final class HandoffCoordinator {
             let expected = "OK"
             if raw.uppercased().contains(expected) {
                 verifyOutcome = .success
+                // Recorded here, at the moment it is actually true, rather than
+                // from a view lifecycle. The wizard used to mark it in the
+                // outcome label's onAppear, which does not run again when a
+                // failed verify is retried and succeeds: the label is already on
+                // screen, so a working bridge was never recorded as verified.
+                settings.markBridgeVerified(verifyingDestination ?? destination)
             } else {
                 verifyOutcome = .unexpectedContent(raw)
             }
