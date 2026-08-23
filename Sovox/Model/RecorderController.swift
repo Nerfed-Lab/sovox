@@ -58,6 +58,10 @@ final class RecorderController: SovoxCommandHandler {
 
     func bootstrap() {
         SovoxCommands.handler = self
+        // Phase 15c. Both bridge files exist before the wizard is ever opened,
+        // so the folder the user is told to point the Shortcut at is never
+        // empty of the thing they are looking for.
+        RecordingPaths.ensureBridgeFiles()
         Task {
             await TranscriptionService.shared.attach(
                 onState: { [weak self] sessionID, index, state in

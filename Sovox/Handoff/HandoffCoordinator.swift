@@ -16,22 +16,85 @@ enum BridgePurpose: String, Codable, Sendable {
 /// not work" sends the user round the same four steps with no idea which one is
 /// wrong.
 enum BridgeVerifyOutcome: Equatable, Sendable {
+    /// x-success, and the reply says OK.
     case success
-    case shortcutNotFound
-    case noResultFile
+    /// x-error, and the result file was never touched. Shortcuts returns
+    /// x-error both when no shortcut carries the name AND when one does and
+    /// fails partway, so this cannot claim the shortcut is missing.
+    case notFoundOrFailedEarly
+    /// x-error, but the result file is newer than the request: it ran, got as
+    /// far as saving something, and failed after that.
+    case ranButFailedLater(String)
+    /// x-success, but the reply is not OK. Almost always guidance text pasted
+    /// into the prompt field, so the model answered a different question.
     case unexpectedContent(String)
+    /// x-success, and nothing was written at all.
+    case noResultFile
+    /// Neither callback arrived inside a minute.
+    case noResponse
 
+    var isSuccess: Bool { self == .success }
+
+    /// Never a raw error code. Every one of these says what to check next.
     var message: String {
         switch self {
         case .success:
             return "Round trip worked."
-        case .shortcutNotFound:
-            return "Shortcuts reported an error, which usually means no shortcut with that exact name exists. Check the name character for character."
-        case .noResultFile:
-            return "The shortcut ran but never wrote the result file. Check action 4 saves to the right folder with the exact file name and Overwrite on."
+        case .notFoundOrFailedEarly:
+            return "The Shortcut either does not exist under this exact name, or it failed before saving a result."
+        case .ranButFailedLater(let got):
+            return "The Shortcut ran and saved something, then failed. It wrote: \(BridgeVerifyOutcome.excerpt(got))"
         case .unexpectedContent(let got):
-            return "The result file came back with something unexpected: \(got.prefix(80)). Check action 2 passes the text from action 1 to the AI, and action 3 saves the AI reply."
+            return "The reply came back, but it is not OK. It says: \(BridgeVerifyOutcome.excerpt(got))"
+        case .noResultFile:
+            return "The Shortcut finished but never wrote the result file."
+        case .noResponse:
+            return "No response from Shortcuts inside a minute."
         }
+    }
+
+    /// What to try next, listed rather than left to the user to guess.
+    var causes: [String] {
+        switch self {
+        case .success:
+            return []
+        case .notFoundOrFailedEarly:
+            return ["The name does not match character for character.",
+                    "Action 1 is pointing at the wrong file.",
+                    "Action 3 is missing its Subpath."]
+        case .ranButFailedLater:
+            return ["Action 3 saved, then something after it failed.",
+                    "Check nothing was added after Save File."]
+        case .unexpectedContent:
+            return ["Action 2's prompt field contains typed text as well as the File variable.",
+                    "Action 1 is reading a different file."]
+        case .noResultFile:
+            return ["Action 3's Subpath is empty.",
+                    "Action 3 is saving to a different folder."]
+        case .noResponse:
+            return ["The shortcut name is not exactly right.",
+                    "Shortcuts did not open at all."]
+        }
+    }
+
+    /// The probe asks for exactly OK, so the reply must be exactly OK.
+    ///
+    /// A substring test passed on any conversational answer that happens to
+    /// contain those two letters, and ordinary ones do: "Okay, here is what I
+    /// found", "It looks like you want me to use the file from action 1". That
+    /// is defect 1 from the field report, the case this check exists to catch,
+    /// and it was being reported as a working bridge and then persisted as
+    /// verified. Punctuation and quoting around the word are tolerated because
+    /// a model will add them; a sentence is not.
+    static func isProbeSuccess(_ raw: String) -> Bool {
+        let noise = CharacterSet.whitespacesAndNewlines
+            .union(CharacterSet(charactersIn: ".!?,;:\"'`*_-"))
+        return raw.trimmingCharacters(in: noise).uppercased() == "OK"
+    }
+
+    static func excerpt(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
     }
 }
 
@@ -57,6 +120,16 @@ final class HandoffCoordinator {
     /// round trip through the model.
     private(set) var pendingDraft: OutlookDraft?
     private var requestStartedAt = Date.distantPast
+    /// Modification date of the result file at the moment the bridge was
+    /// invoked. A reply is only this run's reply if the file is newer.
+    private var resultBaseline = Date.distantPast
+    /// Identifies the current verify run, so a timeout from an earlier one
+    /// cannot overwrite the outcome of a later one.
+    private var verifyToken = UUID()
+    /// Phase 15f. Set when a manual test prompt has been written and the user
+    /// has been told to run the Shortcut themselves.
+    private(set) var manualTestArmed = false
+    private(set) var manualTestResult: String?
     private var destination: AIDestination = .chatgpt
     private var sessionID: String?
     private var purpose: BridgePurpose = .notes
@@ -67,6 +140,14 @@ final class HandoffCoordinator {
     /// delivered to the wrong flow. That has been observed to put meeting notes
     /// into the Ask thread and to-do operation lines into an Outlook draft
     /// addressed to the user's real work email.
+    /// A request recorded on disk, which survives the process dying. Distinct
+    /// from isInFlight, which only knows what this process has seen.
+    var hasPersistedRequest: Bool { requestStartedAt != .distantPast }
+
+    /// Reads the persisted record the way a fresh process does. Exposed so the
+    /// relaunch path can be asserted rather than reasoned about.
+    func restoreForTesting() { restoreInFlightRequest() }
+
     var isInFlight: Bool {
         phase == .waitingForBridge || phase == .collectingResult
     }
@@ -132,6 +213,28 @@ final class HandoffCoordinator {
         requestStartedAt = stamp > 0 ? Date(timeIntervalSince1970: stamp) : .distantPast
     }
 
+    /// Empties the result file rather than removing it, and records the
+    /// baseline the next reply is compared against. Both files must survive:
+    /// their presence in Files is what tells the user the app writes where the
+    /// Shortcut reads.
+    private func clearResultFile() {
+        RecordingPaths.ensureBridgeFiles()
+        try? "".write(to: RecordingPaths.resultFile, atomically: true, encoding: .utf8)
+        resultBaseline = RecordingPaths.modificationDate(of: RecordingPaths.resultFile) ?? Date()
+    }
+
+    /// Phase 15d fallback and 15g diagnostics: whether the result file has been
+    /// touched since the bridge was invoked.
+    var resultFileIsNewerThanRequest: Bool {
+        guard let modified = RecordingPaths.modificationDate(of: RecordingPaths.resultFile) else { return false }
+        // After a relaunch there is no in memory baseline, so fall back to the
+        // persisted start of the request. Comparing against distantPast would
+        // call every stale file on disk this run's answer.
+        let reference = resultBaseline == .distantPast ? requestStartedAt : resultBaseline
+        guard reference != .distantPast else { return false }
+        return modified > reference.addingTimeInterval(0.5)
+    }
+
     private func clearInFlightRequest() {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: Keys.sessionID)
@@ -141,10 +244,10 @@ final class HandoffCoordinator {
         defaults.removeObject(forKey: Keys.question)
         sessionID = nil
         requestStartedAt = .distantPast
-        // The prompt file holds the full plaintext transcript in a directory
-        // that Info.plist deliberately exposes in Files. It only needs to exist
-        // for the length of the Shortcut run.
-        try? FileManager.default.removeItem(at: RecordingPaths.pendingPromptFile)
+        // The transcript still has to go: this directory is deliberately visible
+        // in Files. The file itself stays, holding its placeholder, because it
+        // is the only visible proof the app writes where the Shortcut reads.
+        RecordingPaths.resetPendingPromptFile()
     }
 
     var shortcutsInstalled: Bool {
@@ -217,7 +320,7 @@ final class HandoffCoordinator {
 
         // Remove any answer from a previous run so a stale file cannot be read
         // back as this run's result.
-        try? FileManager.default.removeItem(at: RecordingPaths.resultFile)
+        clearResultFile()
 
         guard shortcutsInstalled else {
             phase = .needsShortcutSetup(destination)
@@ -269,7 +372,7 @@ final class HandoffCoordinator {
             phase = .failed("Could not write \(RecordingPaths.pendingPromptFile.lastPathComponent). \(error.localizedDescription)")
             return
         }
-        try? FileManager.default.removeItem(at: RecordingPaths.resultFile)
+        clearResultFile()
 
         guard shortcutsInstalled else {
             phase = .needsShortcutSetup(destination)
@@ -323,7 +426,7 @@ final class HandoffCoordinator {
             phase = .failed("Could not write \(RecordingPaths.pendingPromptFile.lastPathComponent). \(error.localizedDescription)")
             return
         }
-        try? FileManager.default.removeItem(at: RecordingPaths.resultFile)
+        clearResultFile()
         guard shortcutsInstalled, let url = bridgeURL(for: destination) else {
             phase = .needsShortcutSetup(destination)
             return
@@ -398,7 +501,11 @@ final class HandoffCoordinator {
     /// the model is still thinking cannot cancel a request that is still alive.
     func collectIfResultWaiting(settings: AppSettings, store: RecordingStore) async {
         restoreInFlightRequest()
-        guard isInFlight, isFresh(RecordingPaths.resultFile),
+        // Deliberately not gated on isInFlight. That reads `phase`, which lives
+        // in memory only, so after the jetsam this fallback exists for it is
+        // always false and the answer was dropped in silence. The persisted
+        // request plus the file's own date is what makes a result this run's.
+        guard hasPersistedRequest, isFresh(RecordingPaths.resultFile),
               let text = try? String(contentsOf: RecordingPaths.resultFile, encoding: .utf8),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         await collectResult(settings: settings, store: store)
@@ -410,7 +517,9 @@ final class HandoffCoordinator {
 
         guard let raw = await pollForResult() else {
             if purpose == .verify {
-                verifyOutcome = .noResultFile
+                verifyOutcome = resultFileIsNewerThanRequest
+                    ? .unexpectedContent((try? String(contentsOf: RecordingPaths.resultFile, encoding: .utf8)) ?? "")
+                    : .noResultFile
                 clearInFlightRequest()
                 phase = .idle
                 return
@@ -430,8 +539,7 @@ final class HandoffCoordinator {
         }
 
         if purpose == .verify {
-            let expected = "OK"
-            if raw.uppercased().contains(expected) {
+            if BridgeVerifyOutcome.isProbeSuccess(raw) {
                 verifyOutcome = .success
                 // Recorded here, at the moment it is actually true, rather than
                 // from a view lifecycle. The wizard used to mark it in the
@@ -570,8 +678,20 @@ final class HandoffCoordinator {
     }
 
     func handleFailure() {
+        // The callback can arrive into a fresh process, after a jetsam during
+        // the round trip. Without this the purpose reads as its default and a
+        // failed verify would be reported as a broken notes hand off.
+        restoreInFlightRequest()
         if purpose == .verify {
-            verifyOutcome = .shortcutNotFound
+            // Shortcuts returns x-error for a missing shortcut and for one that
+            // exists and fails partway. The result file's date is what tells
+            // them apart, and the old code asserted the first without checking.
+            if resultFileIsNewerThanRequest {
+                let raw = (try? String(contentsOf: RecordingPaths.resultFile, encoding: .utf8)) ?? ""
+                verifyOutcome = .ranButFailedLater(raw)
+            } else {
+                verifyOutcome = .notFoundOrFailedEarly
+            }
             clearInFlightRequest()
             phase = .idle
             return
@@ -598,12 +718,12 @@ final class HandoffCoordinator {
             try "Reply with exactly: OK".write(to: RecordingPaths.pendingPromptFile,
                                                atomically: true, encoding: .utf8)
         } catch {
-            verifyOutcome = .unexpectedContent("could not write the prompt file")
+            verifyOutcome = .noResultFile
             return
         }
-        try? FileManager.default.removeItem(at: RecordingPaths.resultFile)
+        clearResultFile()
         guard shortcutsInstalled, let url = bridgeURL(for: destination) else {
-            verifyOutcome = .shortcutNotFound
+            verifyOutcome = .notFoundOrFailedEarly
             return
         }
         self.destination = destination
@@ -612,10 +732,80 @@ final class HandoffCoordinator {
         requestStartedAt = Date()
         persistInFlightRequest()
         phase = .waitingForBridge
+        armVerifyTimeout()
         UIApplication.shared.open(url, options: [:]) { [weak self] opened in
             guard let self, !opened else { return }
-            Task { @MainActor in self.verifyOutcome = .shortcutNotFound }
+            Task { @MainActor in self.verifyOutcome = .notFoundOrFailedEarly }
         }
+    }
+
+    /// Neither callback is guaranteed to arrive. Without this the wizard sits on
+    /// a spinner with no verdict, which is indistinguishable from the app being
+    /// broken.
+    private func armVerifyTimeout(seconds: UInt64 = 60) {
+        let token = UUID()
+        verifyToken = token
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            guard let self, self.verifyToken == token, self.purpose == .verify,
+                  self.isInFlight, self.verifyOutcome == nil else { return }
+            // The Shortcut may still have finished without telling us.
+            if self.resultFileIsNewerThanRequest {
+                let raw = (try? String(contentsOf: RecordingPaths.resultFile, encoding: .utf8)) ?? ""
+                self.verifyOutcome = BridgeVerifyOutcome.isProbeSuccess(raw) ? .success : .unexpectedContent(raw)
+                if self.verifyOutcome == .success {
+                    AppSettings.shared.markBridgeVerified(self.verifyingDestination ?? self.destination)
+                }
+            } else {
+                self.verifyOutcome = .noResponse
+            }
+            self.clearInFlightRequest()
+            self.phase = .idle
+        }
+    }
+
+    // MARK: Phase 15f, manual test
+
+    /// Writes the probe prompt and stops. Deliberately does not invoke the
+    /// Shortcut: running it by hand is what separates "the Shortcut is wrong"
+    /// from "the app is invoking it wrong", and a user cannot tell those apart
+    /// otherwise.
+    @discardableResult
+    func prepareManualTest() -> Bool {
+        RecordingPaths.ensureBridgeFiles()
+        clearResultFile()
+        manualTestResult = nil
+        do {
+            try HandoffCoordinator.manualTestPrompt.write(to: RecordingPaths.pendingPromptFile,
+                                                          atomically: true, encoding: .utf8)
+            manualTestArmed = true
+            return true
+        } catch {
+            manualTestArmed = false
+            return false
+        }
+    }
+
+    static let manualTestPrompt = "Reply with exactly: OK"
+
+    /// Reads whatever is in the result file now and reports it verbatim.
+    @discardableResult
+    func checkManualResult() -> String {
+        let raw = (try? String(contentsOf: RecordingPaths.resultFile, encoding: .utf8)) ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            manualTestResult = "Nothing in \(RecordingPaths.resultFile.lastPathComponent) yet. Run the Shortcut in the Shortcuts app, then check again."
+        } else if BridgeVerifyOutcome.isProbeSuccess(trimmed) {
+            manualTestResult = "The Shortcut works. It wrote: \(BridgeVerifyOutcome.excerpt(trimmed))"
+        } else {
+            manualTestResult = "The Shortcut ran but replied with something else: \(BridgeVerifyOutcome.excerpt(trimmed))"
+        }
+        return manualTestResult ?? ""
+    }
+
+    func clearManualTest() {
+        manualTestArmed = false
+        manualTestResult = nil
     }
 
     /// Phase 12 Layer 2. Sends an already assembled prompt straight through the
@@ -637,7 +827,7 @@ final class HandoffCoordinator {
             phase = .failed("Could not write the probe prompt. \(error.localizedDescription)")
             return
         }
-        try? FileManager.default.removeItem(at: RecordingPaths.resultFile)
+        clearResultFile()
         guard shortcutsInstalled, let url = bridgeURL(for: destination) else {
             phase = .needsShortcutSetup(destination)
             return

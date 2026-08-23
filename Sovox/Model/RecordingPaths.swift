@@ -34,6 +34,41 @@ enum RecordingPaths {
         documents.appendingPathComponent("sovox-result.txt")
     }
 
+    /// Phase 15c. Both bridge files exist from first launch and stay there.
+    ///
+    /// Their presence in Files is the user's only visible proof that the app
+    /// writes where the Shortcut reads. A user who opened the folder and found
+    /// only Recordings had no way to tell whether the app or the Shortcut was
+    /// at fault. Written to the Documents root, which is what surfaces as the
+    /// app's folder under On My iPhone, never to a subfolder.
+    static let pendingPlaceholder = "ready"
+
+    @discardableResult
+    static func ensureBridgeFiles() -> Bool {
+        let fm = FileManager.default
+        var ok = true
+        if !fm.fileExists(atPath: pendingPromptFile.path) {
+            ok = (try? pendingPlaceholder.write(to: pendingPromptFile, atomically: true, encoding: .utf8)) != nil
+        }
+        if !fm.fileExists(atPath: resultFile.path) {
+            ok = ((try? "".write(to: resultFile, atomically: true, encoding: .utf8)) != nil) && ok
+        }
+        return ok
+    }
+
+    /// Returns the prompt file to its placeholder instead of deleting it.
+    ///
+    /// The transcript still has to go: this directory is deliberately visible in
+    /// Files. But deleting the file removed the one signal the user could check,
+    /// so it is emptied rather than removed.
+    static func resetPendingPromptFile() {
+        try? pendingPlaceholder.write(to: pendingPromptFile, atomically: true, encoding: .utf8)
+    }
+
+    static func modificationDate(of url: URL) -> Date? {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+    }
+
     static func notesFile(for date: Date) -> URL {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

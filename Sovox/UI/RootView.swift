@@ -33,5 +33,11 @@ struct RootView: View {
                                     set: { if !$0 { showFirstRun = false } })) {
             SetupWizardView()
         }
+        // Phase 15h. Only for a user who had a working bridge under the old
+        // names. Three edits, not a rebuild.
+        .sheet(isPresented: Binding(get: { settings.bridgeMigrationPending && settings.setupCompleted },
+                                    set: { if !$0 { settings.bridgeMigrationPending = false } })) {
+            BridgeMigrationView()
+        }
     }
 }

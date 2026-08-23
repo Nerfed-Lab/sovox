@@ -13,12 +13,17 @@ enum AIDestination: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Name of the bridge Shortcut the user creates once. Spaces and hyphens in
-    /// the name are why the x-callback URL must be percent encoded properly.
+    /// Name of the bridge Shortcut the user creates once.
+    ///
+    /// Letters only, deliberately. The previous names carried spaces and a
+    /// hyphen, and iOS smart punctuation turned the hyphen the user typed into
+    /// an en dash. Shortcuts then matched nothing, and the app blamed a missing
+    /// shortcut, which sent the user looking in the wrong place. A name with no
+    /// punctuation at all cannot be mangled by anything.
     var shortcutName: String {
         switch self {
-        case .chatgpt: return "Sovox Bridge - ChatGPT"
-        case .claude: return "Sovox Bridge - Claude"
+        case .chatgpt: return "SovoxChatGPT"
+        case .claude: return "SovoxClaude"
         }
     }
 }

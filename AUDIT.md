@@ -342,6 +342,94 @@ fire at all and the reply sat unread. Both halves now persist with the in flight
 record, `consumeTodoResponse` returns the reply together with its source ids,
 and the tab drains from a `task` as well as an `onChange`.
 
+# Phase 15, bridge setup corrected
+
+A real setup attempt on device produced four defects, every one of them caused
+by how the instructions were presented rather than by the user.
+
+**15a. Names are letters only.** `SovoxChatGPT` and `SovoxClaude`. The old names
+carried a space and a hyphen, iOS smart punctuation turned the typed hyphen into
+an en dash, the lookup matched nothing, and the app asserted the shortcut did not
+exist. A name with no punctuation at all cannot be mangled. The encoder still
+percent encodes it, and a test asserts the encoded form equals the name: a name
+that needs encoding is a name that can be mistyped.
+
+**15b. Literal strings render as literal ASCII.** Every value the user must
+reproduce is drawn monospaced and selectable, so a hyphen cannot be mistaken for
+a dash and the bytes can be checked by hand. A test walks every displayed
+literal, every copyable value, both file names and both callback URLs, and fails
+on U+2013, U+2014 or any curly quote. `verify.sh` scans the whole Swift tree for
+the same six code points.
+
+**15c. Both bridge files exist from first launch and stay.** Written to the
+Documents root, which is what surfaces as the app's folder in Files, never to a
+subfolder. `sovox-pending.txt` holds the single line `ready` and
+`sovox-result.txt` is empty. Cleanup rewrites the placeholder instead of
+deleting the file: the transcript still has to go, but the file's presence is the
+user's only visible proof that the app writes where the Shortcut reads. A user
+who opened that folder and found only Recordings had no way to tell which end was
+broken.
+
+**15d. Three actions.** The callback is carried by x-success in the URL the app
+opens, so the fourth action is gone, and with it the step where "Open" and "Open
+URLs" sit adjacent in search under nearly identical names. The fallback for
+x-success never firing already existed and is now backed by an explicit
+baseline: the result file's modification date is captured at the moment the
+bridge is invoked, and becoming active collects anything newer.
+
+**15e. One control per sub step.** The row per action table is gone. Fourteen
+numbered sub steps, each exactly one of a literal value, a toggle with its exact
+label and state, a folder to navigate into, a variable to tap, or plain guidance.
+A Copy button is attached to `.copyValue` and to nothing else, and that is
+enforced in the model rather than in the view, which is what makes defect 1
+structurally impossible rather than merely fixed. Each sub step carries a
+checkbox that persists, so setup can be stopped and resumed. Every named field
+also states its position, because field labels move between iOS versions. Two
+things that look like faults and are not are stated outright: folder pickers grey
+out files, and path fields are typed text whose target need not exist.
+
+**15f. Prepare a manual test.** Writes the probe prompt and stops, without
+invoking anything. Running the Shortcut by hand is the only way to tell a wrong
+Shortcut from an app invoking it wrongly, and the user could not previously make
+that distinction at all.
+
+**15g. Five outcomes, no raw codes.** Shortcuts returns x-error both for a
+missing shortcut and for one that exists and fails partway, so the old message,
+which asserted the first, sent the user hunting in the wrong place. The result
+file's modification date separates them. Each outcome names what to check next,
+and a sixty second timeout produces a verdict rather than a spinner.
+
+**15h. Migration, not rebuild.** Renaming the Shortcuts makes any earlier
+verification meaningless, so it is cleared once for users who had got that far,
+and a card names the three edits. A fresh install has nothing to migrate and
+never sees it.
+
+# Phase 15, what the adversarial audit found
+
+Six independent auditors, every finding attacked by a separate skeptic before it
+counted. Nineteen raised, two survived. Both were in the new code.
+
+**Verify called a broken bridge working.** The success test was
+`raw.uppercased().contains("OK")`, and ordinary conversational replies contain
+those two letters: "Okay, here is what I found", "It looks like you want me to
+use the file from action 1". That second one is defect 1 from the field report
+verbatim, the exact failure Verify exists to catch, and it was being reported as
+"Round trip worked" and then persisted as verified, so the wizard stopped
+offering any remediation. The probe asks for exactly OK, so the reply must be
+exactly OK: `isProbeSuccess` strips surrounding punctuation and quoting, which a
+model will add, and rejects a sentence. My own test fixture had hidden the gap by
+happening not to contain those letters.
+
+**The x-success fallback was dead in the process it exists for.**
+`collectIfResultWaiting` guarded on `isInFlight`, which reads `phase`, which
+lives in memory and is never persisted. After the jetsam the fallback was written
+for, `phase` is idle, so the guard failed before the durable check on the result
+file's date was ever reached, and a finished answer was dropped in silence. It
+now keys off `hasPersistedRequest`, which is the record on disk.
+
+Also fixed while there: the recovery screen numbered every step twice, once in a
+pill and once inside the step string.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

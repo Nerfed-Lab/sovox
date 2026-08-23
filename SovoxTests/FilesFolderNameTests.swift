@@ -47,15 +47,18 @@ final class FilesFolderNameTests: XCTestCase {
         }
     }
 
-    func testShortcutNamesUseAPlainAsciiHyphen() {
-        // The name has to be typed or pasted exactly. An en dash would look
-        // almost identical in the monospaced label and never match.
+    func testShortcutNamesCarryNothingThatCanBeMangled() {
+        // This used to require a plain hyphen. On device, iOS smart punctuation
+        // turned the hyphen the user typed into an en dash, the name matched
+        // nothing, and the app blamed a missing shortcut. A name with no
+        // punctuation at all cannot be mangled by anything.
         for destination in AIDestination.allCases {
             let name = BridgeShortcutRecipe.name(for: destination)
-            XCTAssertTrue(name.contains(" - "), "\(name) must use a plain hyphen")
+            XCTAssertFalse(name.contains("-"), "\(name) still has a hyphen")
+            XCTAssertFalse(name.contains(" "), "\(name) still has a space")
             XCTAssertFalse(name.contains("\u{2013}"), "\(name) contains an en dash")
             XCTAssertFalse(name.contains("\u{2014}"), "\(name) contains an em dash")
-            XCTAssertTrue(name.allSatisfy { $0.isASCII }, "\(name) is not pure ASCII")
+            XCTAssertTrue(name.allSatisfy { $0.isASCII && $0.isLetter }, "\(name) is not letters only")
         }
     }
 }

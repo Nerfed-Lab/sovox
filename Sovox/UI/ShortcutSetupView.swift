@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Shown when the bridge Shortcut did not run. Lists the exact four actions
-/// rather than a generic failure, and copies the required name to the clipboard.
+/// Shown when the bridge Shortcut did not run. Lists the exact sub steps rather
+/// than a generic failure, and copies the required name to the clipboard.
 struct ShortcutSetupView: View {
     var destination: AIDestination
     var onClose: () -> Void
@@ -21,7 +21,7 @@ struct ShortcutSetupView: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .foregroundStyle(SovoxPalette.paused)
-                    Text("Sovox was renamed from Capture. Bridge Shortcuts built before the rename point at the old name and the old file names, so they no longer run. Rebuild them below.")
+                    Text("The bridge Shortcuts changed names in this version. A Shortcut whose name contains a space or a dash no longer matches. Rename yours to the name below, and delete its last action if it opens a URL.")
                         .font(.footnote)
                         .foregroundStyle(SovoxPalette.ink)
                 }
@@ -29,7 +29,7 @@ struct ShortcutSetupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassTinted(SovoxPalette.paused, cornerRadius: 18)
 
-                Text("Open Shortcuts, make a new shortcut with these four actions, then name it exactly:")
+                Text("Open Shortcuts, make a new shortcut with these three actions, then name it exactly:")
                     .font(.subheadline)
                     .foregroundStyle(SovoxPalette.dim)
 
@@ -48,14 +48,13 @@ struct ShortcutSetupView: View {
                 .buttonStyle(.plain)
                 .glassTinted(SovoxPalette.accent, cornerRadius: 18)
 
-                ForEach(Array(BridgeShortcutRecipe.steps(for: destination).enumerated()), id: \.offset) { index, step in
+                ForEach(BridgeShortcutRecipe.steps(for: destination), id: \.self) { step in
                     HStack(alignment: .top, spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.headline.monospacedDigit())
-                            .frame(width: 26, height: 26)
-                            .glassPill()
+                        // The step string already carries its own number, and it
+                        // is the number the wizard uses. A pill here numbered
+                        // them a second time.
                         Text(step)
-                            .font(.subheadline)
+                            .font(.subheadline.monospaced())
                             .foregroundStyle(SovoxPalette.ink)
                         Spacer(minLength: 0)
                     }

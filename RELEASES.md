@@ -43,3 +43,27 @@ Worth exercising:
 - Settings, Self Test, Run smoke test.
 - Generate notes on a recording, then try the Ask tab and the To-dos tab.
 - Delete audio only on a finished recording and confirm the transcript survives.
+
+# 1.15, build 5
+
+Phase 15, bridge setup corrected after a real attempt on device failed.
+
+- Shortcut names are letters only: SovoxChatGPT, SovoxClaude
+- The bridge is three actions. Delete the fourth if you already built it
+- sovox-pending.txt and sovox-result.txt exist from first launch and stay there
+- The wizard is one control per sub step, with a checkbox on each and Copy
+  buttons only on values you must reproduce
+- Prepare a manual test, run the Shortcut yourself, then Check result
+- Verify tells five failures apart instead of always blaming the name
+
+# What to Test, paste into App Store Connect for build 5
+
+Your existing bridge Shortcut will not run: the names changed. A card on first
+launch names the three edits, or Settings, Setup rebuilds it from scratch.
+
+Worth exercising:
+- Settings, Setup, and follow the ticked sub steps end to end
+- Prepare a manual test, run SovoxClaude by hand in Shortcuts, tap Check result
+- Verify, and confirm the failure it reports matches what is actually wrong
+- Open Files, On My iPhone, Sovox, and confirm both txt files are there before
+  and after a Verify run

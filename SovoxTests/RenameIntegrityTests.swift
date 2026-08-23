@@ -56,8 +56,8 @@ final class RenameIntegrityTests: XCTestCase {
     }
 
     func testBridgeShortcutNamesAreRebranded() {
-        XCTAssertEqual(BridgeShortcutRecipe.name(for: .chatgpt), "Sovox Bridge - ChatGPT")
-        XCTAssertEqual(BridgeShortcutRecipe.name(for: .claude), "Sovox Bridge - Claude")
+        XCTAssertEqual(BridgeShortcutRecipe.name(for: .chatgpt), "SovoxChatGPT")
+        XCTAssertEqual(BridgeShortcutRecipe.name(for: .claude), "SovoxClaude")
         for destination in AIDestination.allCases {
             for step in BridgeShortcutRecipe.steps(for: destination) {
                 XCTAssertFalse(step.lowercased().contains("capture-"), step)

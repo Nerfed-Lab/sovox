@@ -18,6 +18,11 @@ final class AppSettings {
     var transcriptionLocale: String { didSet { defaults.set(transcriptionLocale, forKey: Keys.transcriptionLocale) } }
     var verifiedBridges: Set<String> { didSet { defaults.set(Array(verifiedBridges), forKey: Keys.verifiedBridges) } }
     var setupCompleted: Bool { didSet { defaults.set(setupCompleted, forKey: Keys.setupCompleted) } }
+    /// Phase 15h. True once, for a user who set up a bridge under the old
+    /// names, until they dismiss the card explaining the three edits.
+    var bridgeMigrationPending: Bool {
+        didSet { defaults.set(bridgeMigrationPending, forKey: Keys.bridgeMigrationPending) }
+    }
     var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: Keys.appearance) } }
     var defaultOutputs: Set<OutputMode> {
         didSet { defaults.set(defaultOutputs.map(\.rawValue), forKey: Keys.defaultOutputs) }
@@ -35,6 +40,8 @@ final class AppSettings {
         static let customActions = "sovox.customActions"
         static let verifiedBridges = "sovox.verifiedBridges"
         static let setupCompleted = "sovox.setupCompleted"
+        static let bridgeMigrationPending = "sovox.bridgeMigrationPending"
+        static let bridgeNamesV15 = "sovox.bridgeNamesV15"
         static let transcriptionLocale = "sovox.transcriptionLocale"
     }
 
@@ -58,8 +65,26 @@ final class AppSettings {
         defaults.set(true, forKey: migrationFlag)
     }
 
+    /// Phase 15a renamed both bridge Shortcuts, so any earlier verification
+    /// proves nothing: it was a round trip through a name that no longer
+    /// exists. Clear it and raise the migration card once, for users who had
+    /// actually got that far. A fresh install has nothing to migrate and is
+    /// left alone.
+    @discardableResult
+    static func migrateBridgeNames(_ defaults: UserDefaults) -> Bool {
+        guard !defaults.bool(forKey: Keys.bridgeNamesV15) else { return false }
+        defaults.set(true, forKey: Keys.bridgeNamesV15)
+        let hadOldSetup = defaults.bool(forKey: Keys.setupCompleted)
+            || !(defaults.stringArray(forKey: Keys.verifiedBridges) ?? []).isEmpty
+        guard hadOldSetup else { return false }
+        defaults.set([String](), forKey: Keys.verifiedBridges)
+        defaults.set(true, forKey: Keys.bridgeMigrationPending)
+        return true
+    }
+
     private init() {
         AppSettings.migrateLegacyKeys(defaults)
+        _ = AppSettings.migrateBridgeNames(defaults)
         fullName = defaults.string(forKey: Keys.fullName) ?? ""
         workEmail = defaults.string(forKey: Keys.workEmail) ?? ""
         destination = AIDestination(rawValue: defaults.string(forKey: Keys.destination) ?? "") ?? .chatgpt
@@ -76,6 +101,7 @@ final class AppSettings {
         transcriptionLocale = defaults.string(forKey: Keys.transcriptionLocale) ?? TranscriptionLocale.defaultIdentifier
         verifiedBridges = Set(defaults.stringArray(forKey: Keys.verifiedBridges) ?? [])
         setupCompleted = defaults.bool(forKey: Keys.setupCompleted)
+        bridgeMigrationPending = defaults.bool(forKey: Keys.bridgeMigrationPending)
         appearance = AppearanceMode(rawValue: defaults.string(forKey: Keys.appearance) ?? "") ?? .dark
         let raw = defaults.stringArray(forKey: Keys.defaultOutputs) ?? [OutputMode.actionsAndDecisions.rawValue]
         let parsed = Set(raw.compactMap(OutputMode.init(rawValue:)))

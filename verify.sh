@@ -114,6 +114,51 @@ must_be_absent "E42 no custom vocabulary"          "contextualStrings|customLang
 if find . \( -name '*.mlmodel*' -o -name '*.ggml*' \) | grep -q .; then
   note "E41 no bundled speech model" "FAIL"; fail=1; else note "E41 no bundled speech model" "PASS"; fi
 
+echo "== E48 to E60 bridge setup =="
+# E48. Letters only, in code and in every displayed string.
+if grep -rn 'Sovox Bridge' --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ | grep -qv 'Tests'; then
+  note "E48 no old bridge name in app code" "FAIL"; fail=1
+else
+  note "E48 no old bridge name in app code" "PASS"
+fi
+if [ "$(grep -A4 'var shortcutName' Sovox/Model/OutputTypes.swift | grep -oE 'return "[^"]*"' | grep -vcE 'return "[A-Za-z]+"')" = "0" ]; then
+  note "E48 shortcut names are letters only" "PASS"; else note "E48 shortcut names" "FAIL"; fail=1; fi
+
+# E49. Smart punctuation cannot reach a string the user has to reproduce.
+smart=$(grep -rlP '[\x{2013}\x{2014}\x{2018}\x{2019}\x{201C}\x{201D}]' --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ 2>/dev/null | wc -l | tr -d ' ')
+if [ "$smart" = "0" ]; then note "E49 no en dash, em dash or smart quotes" "PASS"; else
+  note "E49 smart punctuation present" "FAIL ($smart)"
+  grep -rlP '[\x{2013}\x{2014}\x{2018}\x{2019}\x{201C}\x{201D}]' --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ | head -3 | sed 's/^/    /'
+  fail=1
+fi
+
+# E50 and E51. Documents root, and never deleted as cleanup.
+if grep -q 'documents.appendingPathComponent("sovox-pending.txt")' Sovox/Model/RecordingPaths.swift; then
+  note "E50 pending file in the Documents root" "PASS"; else note "E50 pending file path" "FAIL"; fail=1; fi
+must_be_absent "E51 pending file never deleted"    "removeItem\(at: RecordingPaths.pendingPromptFile\)"
+
+# E52. Three actions. Nothing in the recipe asks for a callback action.
+if grep -q 'sovox://done' Sovox/Handoff/BridgeShortcutRecipe.swift; then
+  note "E52 recipe has no callback action" "FAIL"; fail=1
+else
+  note "E52 recipe has no callback action" "PASS"
+fi
+
+# E53. The date fallback is wired to becoming active.
+if grep -q 'collectIfResultWaiting' Sovox/SovoxApp.swift; then
+  note "E53 result date fallback on activation" "PASS"; else note "E53 fallback" "FAIL"; fail=1; fi
+
+# E57. Preparing a manual test must not invoke anything.
+if awk '/func prepareManualTest/,/^    }/' Sovox/Handoff/HandoffCoordinator.swift | grep -q 'UIApplication.shared.open'; then
+  note "E57 manual test does not invoke" "FAIL"; fail=1
+else
+  note "E57 manual test does not invoke" "PASS"
+fi
+
+# E59. The migration card exists and is presented.
+if [ -f Sovox/UI/BridgeMigrationView.swift ] && grep -q 'BridgeMigrationView' Sovox/UI/RootView.swift; then
+  note "E59 migration card present" "PASS"; else note "E59 migration card" "FAIL"; fail=1; fi
+
 echo "== E10 colour tokens =="
 stray=$(grep -rlE "0x[0-9A-Fa-f]{6}" --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ 2>/dev/null \
         | grep -v "Theme.swift\|WidgetPalette.swift" | wc -l | tr -d ' ')

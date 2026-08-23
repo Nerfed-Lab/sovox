@@ -91,10 +91,10 @@ final class HandoffTests: XCTestCase {
         XCTAssertTrue(parsed.body.contains("#q4"))
     }
 
-    func testBridgeRecipeHasExactlyFiveActions() {
-        XCTAssertEqual(BridgeShortcutRecipe.steps(for: .chatgpt).count, 5)
-        XCTAssertEqual(BridgeShortcutRecipe.name(for: .chatgpt), "Sovox Bridge - ChatGPT")
-        XCTAssertEqual(BridgeShortcutRecipe.name(for: .claude), "Sovox Bridge - Claude")
+    func testBridgeRecipeIsFourteenSubstepsAcrossThreeActions() {
+        XCTAssertEqual(BridgeShortcutRecipe.steps(for: .chatgpt).count, 14)
+        XCTAssertEqual(BridgeShortcutRecipe.name(for: .chatgpt), "SovoxChatGPT")
+        XCTAssertEqual(BridgeShortcutRecipe.name(for: .claude), "SovoxClaude")
     }
 }
 

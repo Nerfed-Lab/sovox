@@ -20,6 +20,11 @@ struct SetupWizardView: View {
     /// awaited inside the view builder.
     @State private var notificationsOn = false
     @State private var permissionsTick = 0
+    @State private var previewExpanded = false
+    @State private var manualTestNote: String?
+    /// Ticked sub steps, kept across launches so a user can stop halfway.
+    @State private var checkedSteps: Set<String> = Set(
+        UserDefaults.standard.stringArray(forKey: "sovox.setupChecked") ?? [])
 
     private let lastStep = 4
 
@@ -111,29 +116,222 @@ struct SetupWizardView: View {
 
     private func bridgeStep(for destination: AIDestination) -> some View {
         stepScaffold(title: "\(destination.title) bridge",
-                     blurb: "Open Shortcuts, build these four actions, and name it exactly. Copy each value rather than typing it.") {
-            VStack(spacing: 10) {
-                copyRow(label: "Name", value: BridgeShortcutRecipe.name(for: destination))
-                ForEach(Array(BridgeShortcutRecipe.setupRows(for: destination).enumerated()), id: \.offset) { index, row in
-                    copyRow(label: "Action \(index + 1), \(row.action)", value: row.value)
-                }
-
+                     blurb: "Three actions in Shortcuts. Work down the list and tick each line off. Copy buttons appear only next to values you must reproduce exactly.") {
+            VStack(alignment: .leading, spacing: 10) {
                 GlassActionButton(title: "Open Shortcuts", systemImage: "arrow.up.forward.app", tint: nil) {
-                    // create-shortcut lands the user on a new empty shortcut.
                     if let url = URL(string: "shortcuts://create-shortcut") {
                         UIApplication.shared.open(url)
                     }
                 }
 
+                ForEach(groupedSubsteps(for: destination), id: \.0) { group, steps in
+                    Text(group.uppercased())
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SovoxPalette.dim)
+                        .padding(.top, 6)
+                    ForEach(steps) { substep in
+                        substepRow(substep, destination: destination)
+                    }
+                }
+
+                clarification(BridgeShortcutRecipe.pickerClarification)
+                clarification(BridgeShortcutRecipe.pathFieldClarification)
+
+                finishedPreview(for: destination)
+                manualTestCard(for: destination)
                 verifyRow(for: destination)
             }
         }
     }
 
+    private func groupedSubsteps(for destination: AIDestination) -> [(String, [BridgeSubstep])] {
+        let all = BridgeShortcutRecipe.substeps(for: destination)
+        var order: [String] = []
+        var buckets: [String: [BridgeSubstep]] = [:]
+        for step in all {
+            if buckets[step.group] == nil { order.append(step.group) }
+            buckets[step.group, default: []].append(step)
+        }
+        return order.map { ($0, buckets[$0] ?? []) }
+    }
+
+    // MARK: One control per sub step
+
+    /// A Copy button is attached to `.copyValue` and to nothing else. Guidance
+    /// text used to carry one, and a user pasted the sentence "prompt is the
+    /// file from action 1" into the model's prompt field.
+    private func substepRow(_ substep: BridgeSubstep, destination: AIDestination) -> some View {
+        let key = "\(destination.rawValue)-\(substep.number)"
+        let done = checkedSteps.contains(key)
+        return HStack(alignment: .top, spacing: 10) {
+            Button {
+                if done { checkedSteps.remove(key) } else { checkedSteps.insert(key) }
+                persistChecked()
+            } label: {
+                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(done ? SovoxPalette.accent : SovoxPalette.dim)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(substep.number). \(substep.text)")
+                    .font(.footnote)
+                    .foregroundStyle(SovoxPalette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                substepControl(substep)
+
+                if let position = substep.position {
+                    Text(position)
+                        .font(.caption2)
+                        .foregroundStyle(SovoxPalette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if substep.number == 14 {
+                    Text(BridgeShortcutRecipe.nameClarification)
+                        .font(.caption2)
+                        .foregroundStyle(SovoxPalette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard(cornerRadius: 16)
+        .opacity(done ? 0.55 : 1)
+    }
+
+    @ViewBuilder
+    private func substepControl(_ substep: BridgeSubstep) -> some View {
+        switch substep.kind {
+        case .copyValue(let value):
+            copyChip(value)
+        case .toggleOff(let label):
+            togglePill(label, on: false)
+        case .toggleOn(let label):
+            togglePill(label, on: true)
+        case .picker(let path):
+            literal(path)
+        case .variable:
+            Text("Do not type anything here. There is nothing to paste in this field.")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SovoxPalette.pauseAmber)
+                .fixedSize(horizontal: false, vertical: true)
+        case .instruction:
+            EmptyView()
+        }
+    }
+
+    /// Monospaced so a hyphen cannot be mistaken for a dash, and selectable so
+    /// the bytes can be checked by hand.
+    private func literal(_ value: String) -> some View {
+        Text(value)
+            .font(.footnote.monospaced())
+            .foregroundStyle(SovoxPalette.ink)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func copyChip(_ value: String) -> some View {
+        Button {
+            UIPasteboard.general.string = value
+            copied = value
+        } label: {
+            HStack(spacing: 8) {
+                literal(value)
+                Image(systemName: copied == value ? "checkmark" : "doc.on.doc")
+                    .font(.footnote)
+                    .foregroundStyle(SovoxPalette.accent)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .glassCard(cornerRadius: 10)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func togglePill(_ label: String, on: Bool) -> some View {
+        HStack(spacing: 8) {
+            literal(label)
+            Text(on ? "ON" : "OFF")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(on ? SovoxPalette.ok : SovoxPalette.pauseAmber)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .glassCard(cornerRadius: 10)
+    }
+
+    private func clarification(_ text: String) -> some View {
+        Label(text, systemImage: "info.circle")
+            .font(.caption)
+            .foregroundStyle(SovoxPalette.dim)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .glassCard(cornerRadius: 14)
+    }
+
+    private func finishedPreview(for destination: AIDestination) -> some View {
+        DisclosureGroup(isExpanded: Binding(get: { previewExpanded },
+                                            set: { previewExpanded = $0 })) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(BridgeShortcutRecipe.finishedPreview(for: destination), id: \.self) { row in
+                    literal(row)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+        } label: {
+            Text("What this should look like when finished")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(SovoxPalette.ink)
+        }
+        .padding(14)
+        .glassCard(cornerRadius: 16)
+    }
+
+    // MARK: Phase 15f
+
+    private func manualTestCard(for destination: AIDestination) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            GlassActionButton(title: "Prepare a manual test", systemImage: "hand.raised", tint: nil) {
+                if handoff.prepareManualTest() {
+                    manualTestNote = "Now open Shortcuts, run \(BridgeShortcutRecipe.name(for: destination)) yourself, then come back and tap Check result."
+                } else {
+                    manualTestNote = "Could not write \(RecordingPaths.pendingPromptFile.lastPathComponent)."
+                }
+            }
+            if let note = manualTestNote {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(SovoxPalette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if handoff.manualTestArmed {
+                GlassActionButton(title: "Check result", systemImage: "arrow.clockwise", tint: nil) {
+                    _ = handoff.checkManualResult()
+                }
+            }
+            if let result = handoff.manualTestResult {
+                literal(result)
+                    .font(.caption.monospaced())
+            }
+            Text("Running it by hand separates a Shortcut that is wrong from an app that is invoking it wrong.")
+                .font(.caption2)
+                .foregroundStyle(SovoxPalette.dim)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard(cornerRadius: 16)
+    }
+
     @ViewBuilder
     private func verifyRow(for destination: AIDestination) -> some View {
         @Bindable var settings = settings
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             GlassProminentButton(title: "Verify \(destination.title) bridge",
                                  systemImage: "checkmark.seal",
                                  tint: SovoxPalette.accent) {
@@ -147,13 +345,31 @@ struct SetupWizardView: View {
             }
 
             if handoff.verifyingDestination == destination, let outcome = handoff.verifyOutcome {
-                Label(outcome.message,
-                      systemImage: outcome == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(outcome == .success ? SovoxPalette.accent : SovoxPalette.destructive)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .glassCard(cornerRadius: 14)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(outcome.message,
+                          systemImage: outcome.isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(outcome.isSuccess ? SovoxPalette.accent : SovoxPalette.destructive)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(outcome.causes, id: \.self) { cause in
+                        Text("\u{2022} " + cause)
+                            .font(.caption)
+                            .foregroundStyle(SovoxPalette.dim)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !outcome.isSuccess {
+                        Button("Show me the steps again") {
+                            checkedSteps = checkedSteps.filter { !$0.hasPrefix(destination.rawValue) }
+                            persistChecked()
+                        }
+                        .font(.footnote.weight(.semibold))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .glassCard(cornerRadius: 14)
             }
         }
     }
@@ -179,6 +395,10 @@ struct SetupWizardView: View {
                 }
             }
         }
+    }
+
+    private func persistChecked() {
+        UserDefaults.standard.set(Array(checkedSteps), forKey: "sovox.setupChecked")
     }
 
     // MARK: Scaffolding
