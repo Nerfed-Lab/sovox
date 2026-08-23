@@ -92,7 +92,7 @@ if [ $forbidden = 0 ]; then note "no permission keys that trigger review" "PASS"
 scheme_fail=0
 [ "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes json -o - Sovox/Info.plist 2>/dev/null)" = '["sovox"]' ] \
   || { echo "  CFBundleURLSchemes is not exactly [sovox]"; scheme_fail=1; }
-for s in shortcuts ms-outlook; do
+for s in shortcuts ms-outlook chatgpt claude; do
   plutil -extract LSApplicationQueriesSchemes json -o - Sovox/Info.plist 2>/dev/null | grep -q "\"$s\"" \
     || { echo "  LSApplicationQueriesSchemes missing $s"; scheme_fail=1; }
 done
@@ -158,6 +158,61 @@ fi
 # E59. The migration card exists and is presented.
 if [ -f Sovox/UI/BridgeMigrationView.swift ] && grep -q 'BridgeMigrationView' Sovox/UI/RootView.swift; then
   note "E59 migration card present" "PASS"; else note "E59 migration card" "FAIL"; fail=1; fi
+
+echo "== E48 to E73 phases 15 to 18 =="
+# E51. The wizard walks one bridge per run, so the page count is four.
+grep -q "private let lastStep = 3" Sovox/UI/SetupWizardView.swift \
+  && note "E51 wizard is four pages, dots follow" "PASS" || { note "E51 page count" "FAIL"; fail=1; }
+
+# E50. Never both bridges in one run.
+if grep -q "bridgeStep(for: .chatgpt).tag" Sovox/UI/SetupWizardView.swift \
+   || grep -q "bridgeStep(for: .claude).tag" Sovox/UI/SetupWizardView.swift; then
+  note "E50 one bridge page per run" "FAIL"; fail=1
+else
+  note "E50 one bridge page per run" "PASS"
+fi
+
+# E68. The model selector is gone from Transcript Ready.
+if grep -q 'Picker("Destination"' Sovox/UI/OutputSelectionView.swift; then
+  note "E68 no model selector on Transcript Ready" "FAIL"; fail=1
+else
+  note "E68 no model selector on Transcript Ready" "PASS"
+fi
+
+# E66. Phase 16 copy, exactly.
+grep -q 'blurb: "Transcripts are sent to this email."' Sovox/UI/SetupWizardView.swift \
+  && grep -q 'blurb: "Optional. For quick access when you need it."' Sovox/UI/SetupWizardView.swift \
+  && note "E66 wizard copy matches Phase 16" "PASS" || { note "E66 wizard copy" "FAIL"; fail=1; }
+
+# E67. No implementation detail in user copy.
+if grep -nE '"[^"]*(public API|deep link|deep-link|has to be done by hand)[^"]*"' Sovox/UI/*.swift | grep -q .; then
+  note "E67 no API talk in user copy" "FAIL"; fail=1
+else
+  note "E67 no API talk in user copy" "PASS"
+fi
+
+# E69. empty is its own state, and only a failure leaves a gap marker.
+grep -q "case empty" Sovox/Model/RecordingSession.swift \
+  && grep -q "if record.state.isFailure {" Sovox/Model/TranscriptStitcher.swift \
+  && note "E69 empty and failed are distinct" "PASS" || { note "E69 empty vs failed" "FAIL"; fail=1; }
+
+# E72. The retroactive sweep is keyed, so it runs once.
+grep -q "sovox.discardSweepV18" Sovox/Model/RecorderController.swift \
+  && note "E72 retroactive sweep runs once" "PASS" || { note "E72 sweep" "FAIL"; fail=1; }
+
+# E73. No user visible string from the old name.
+# A UserDefaults key is neither user visible nor a callback, and renaming
+# sovox.migratedFromCapture would re-run a migration that has already run.
+capture_hits() {
+  grep -rnE '"[^"]*Capture[^"]*"' --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ \
+    | grep -vE ':[0-9]+: *(//|///)' | grep -v '"sovox\.'
+}
+if capture_hits | grep -q .; then
+  note "E73 no Capture in user strings" "FAIL"; fail=1
+  capture_hits | head -3 | sed 's/^/    /'
+else
+  note "E73 no Capture in user strings" "PASS"
+fi
 
 echo "== E75 on device recognition =="
 # Server recognition is prohibited. Every SFSpeechRecognitionRequest must set

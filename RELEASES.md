@@ -67,3 +67,28 @@ Worth exercising:
 - Verify, and confirm the failure it reports matches what is actually wrong
 - Open Files, On My iPhone, Sovox, and confirm both txt files are there before
   and after a Verify run
+
+# 1.19, build 7
+
+Phases 15 to 18. Phase 19 is not built: the capability probe reports Tier 3 on
+an iPhone 14 Pro, and a re-probe is needed now that Hindi dictation is
+installed.
+
+- The wizard asks which model app you have, and walks you through that one only
+- Settings, Hand off shows whether each model is installed and set up, and will
+  not let you select one that is not
+- Generate says so plainly when the selected bridge is not set up
+- Transcript Ready no longer duplicates the model choice
+- Recordings that caught nothing are discarded automatically. Anything with a
+  failed segment, or any silence over a minute, is kept
+
+# What to Test, paste into App Store Connect for build 7
+
+Worth exercising:
+- Settings, Setup. It should offer only the model app you actually have
+- Settings, Hand off. Selecting a model you have not set up should not be
+  possible, and Set up should open the walkthrough
+- Tap the Action Button twice quickly to make a one second recording. It should
+  vanish with a brief note rather than leaving a row
+- Record a minute of silence. It should stay, labelled No speech detected
+- Settings, Diagnostics, Speech capability, then send me the report

@@ -85,6 +85,7 @@ struct HistoryDetailView: View {
         case .pending: return "clock"
         case .running: return "waveform"
         case .done: return "checkmark.circle.fill"
+        case .empty: return "speaker.slash.circle.fill"
         case .failed: return "exclamationmark.triangle.fill"
         case .deferred: return "thermometer.medium"
         }
@@ -95,7 +96,7 @@ struct HistoryDetailView: View {
         case .done: return SovoxPalette.ok
         case .failed: return SovoxPalette.destructive
         case .deferred: return SovoxPalette.paused
-        case .pending, .running: return SovoxPalette.dim
+        case .empty, .pending, .running: return SovoxPalette.dim
         }
     }
 

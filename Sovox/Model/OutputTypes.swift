@@ -13,6 +13,15 @@ enum AIDestination: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// URL scheme the app registers, used only with canOpenURL to tell whether
+    /// it is installed. Nothing is ever opened with it.
+    var appScheme: String {
+        switch self {
+        case .chatgpt: return "chatgpt"
+        case .claude: return "claude"
+        }
+    }
+
     /// Name of the bridge Shortcut the user creates once.
     ///
     /// Letters only, deliberately. The previous names carried spaces and a

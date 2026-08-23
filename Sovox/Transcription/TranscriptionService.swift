@@ -133,7 +133,12 @@ actor TranscriptionService {
                 // Persisted immediately, keyed by segment. Never held only in
                 // memory, so a jetsam between segments cannot lose work.
                 await deliver(job, text: text)
-                notify(job, .done)
+                // Phase 18a. Recognition succeeding and hearing nothing is a
+                // third outcome, not a failure. Conflating them is what put
+                // "could not be transcribed" under recordings where nobody
+                // spoke.
+                let heardSomething = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                notify(job, heardSomething ? .done : .empty)
             } catch {
                 // No try? anywhere in this pipeline. Every thrown error is
                 // captured, stored with the segment and displayed.

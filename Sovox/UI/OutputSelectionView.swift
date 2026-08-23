@@ -9,7 +9,7 @@ struct OutputSelectionView: View {
     @Environment(RecordingStore.self) private var store
 
     @State private var modes: Set<OutputMode> = []
-    @State private var destination: AIDestination = .chatgpt
+
     @State private var loaded = false
     @State private var title = ""
     @State private var selectedCustom: Set<UUID> = []
@@ -63,13 +63,6 @@ struct OutputSelectionView: View {
                     }
                 }
 
-                Picker("Destination", selection: $destination) {
-                    ForEach(AIDestination.allCases) { option in
-                        Text(option.title).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-
                 statusLine
                 busyLine
 
@@ -77,12 +70,11 @@ struct OutputSelectionView: View {
                                      systemImage: "sparkles",
                                      tint: SovoxPalette.accent) {
                     settings.defaultOutputs = modes
-                    settings.destination = destination
                     handoff.generate(session: store.session(id: session.id) ?? session,
                                      modes: modes,
                                      customActions: settings.customActions.filter { selectedCustom.contains($0.id) },
                                      conversationType: conversationType,
-                                     destination: destination,
+                                     destination: settings.destination,
                                      settings: settings)
                 }
                 .disabled((modes.isEmpty && selectedCustom.isEmpty) || handoff.isInFlight)
@@ -108,13 +100,12 @@ struct OutputSelectionView: View {
             guard !loaded else { return }
             loaded = true
             modes = settings.defaultOutputs
-            destination = settings.destination
             title = session.userTitle ?? ""
             selectedCustom = settings.defaultCustomActionIDs
             conversationType = session.conversationType
         }
         .sheet(isPresented: Binding(get: { isSetupNeeded }, set: { if !$0 { handoff.reset() } })) {
-            ShortcutSetupView(destination: destination) { handoff.reset() }
+            ShortcutSetupView(destination: settings.destination) { handoff.reset() }
         }
     }
 
@@ -141,7 +132,7 @@ struct OutputSelectionView: View {
         case .idle:
             EmptyView()
         case .waitingForBridge:
-            label("Handing off to \(destination.title)", "arrow.up.forward.app", SovoxPalette.dim)
+            label("Handing off to \(settings.destination.title)", "arrow.up.forward.app", SovoxPalette.dim)
         case .collectingResult:
             label("Reading the reply", "arrow.down.doc", SovoxPalette.dim)
         case .composed(let subject):

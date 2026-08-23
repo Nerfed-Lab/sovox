@@ -8,6 +8,8 @@
 	<string>Sovox</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -18,41 +20,6 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UILaunchScreen</key>
-	<dict/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UIUserInterfaceStyle</key>
-	<string>Dark</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>CFBundleIconName</key>
-	<string>AppIcon</string>
-
-
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Sovox records meeting audio on this device so it can be transcribed locally. Nothing is uploaded.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Sovox transcribes your recordings using the on device speech model. No audio or text leaves this iPhone.</string>
-
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
-
-	<key>UIFileSharingEnabled</key>
-	<true/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
-
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -66,30 +33,57 @@
 			</array>
 		</dict>
 	</array>
-
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>shortcuts</string>
 		<string>ms-outlook</string>
+		<string>chatgpt</string>
+		<string>claude</string>
 	</array>
-
-	<key>NSSupportsLiveActivities</key>
+	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<false/>
-
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<false/>
 		<key>NSAllowsArbitraryLoadsForMedia</key>
+		<false/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
 		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<false/>
 		<key>NSExceptionDomains</key>
 		<dict/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sovox records meeting audio on this device so it can be transcribed locally. Nothing is uploaded.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Sovox transcribes your recordings using the on device speech model. No audio or text leaves this iPhone.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<false/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
 </dict>
 </plist>

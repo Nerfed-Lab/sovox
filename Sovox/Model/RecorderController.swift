@@ -29,6 +29,11 @@ final class RecorderController: SovoxCommandHandler {
     var alertMessage: String?
     /// Surfaced in the recording detail view so a failure is never silent.
     private(set) var lastTranscriptionFailure: String?
+    /// Phase 18b. Shown briefly on the record screen after a sweep, so a
+    /// recording vanishing is explained rather than mysterious.
+    var discardNotice: String?
+    private(set) var lastDiscardReason: String?
+
     /// Set when a start arrived from an intent while the consent reminder is on.
     /// The record screen presents the reminder and clears this.
     var pendingConsentStart = false
@@ -58,6 +63,8 @@ final class RecorderController: SovoxCommandHandler {
 
     func bootstrap() {
         SovoxCommands.handler = self
+        // Phase 18d. Once, over what is already on disk.
+        sweepExistingEmptyRecordings()
         // Phase 15c. Both bridge files exist before the wizard is ever opened,
         // so the folder the user is told to point the Shortcut at is never
         // empty of the thing they are looking for.
@@ -449,6 +456,18 @@ final class RecorderController: SovoxCommandHandler {
         }
         session.transcript = session.stitchedTranscript
         store.upsert(session)
+
+        // Phase 18b. Nothing was recorded, so there is nothing to keep. No
+        // confirmation dialogue: a mis-tap on the Action Button must not become
+        // a chore to clean up.
+        if case .discard(let reason) = session.discardVerdict {
+            store.delete(session)
+            if currentSession?.id == sessionID { returnToIdle() }
+            discardNotice = "Nothing recorded, discarded."
+            lastDiscardReason = reason
+            return
+        }
+
         if currentSession?.id == sessionID {
             currentSession = session
             state = .ready
@@ -477,6 +496,21 @@ final class RecorderController: SovoxCommandHandler {
         engine.updateSegmentSeconds(settings.segmentSeconds)
         nextRollDate = engine.currentSegmentRollDate
         activities.update(activityState(), segmentSeconds: settings.segmentSeconds)
+    }
+
+    /// Phase 18d. The rule applied retroactively, exactly once, to the junk
+    /// rows earlier builds left behind. Guarded by its own key rather than by
+    /// counting, so a user with nothing to sweep still never runs it twice.
+    private func sweepExistingEmptyRecordings() {
+        let key = "sovox.discardSweepV18"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        let doomed = store.sessions.filter { $0.discardVerdict.discards }
+        guard !doomed.isEmpty else { return }
+        for session in doomed { store.delete(session) }
+        discardNotice = doomed.count == 1
+            ? "Removed 1 empty recording."
+            : "Removed \(doomed.count) empty recordings."
     }
 
     func clearPendingHandoff() {

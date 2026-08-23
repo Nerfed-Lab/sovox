@@ -430,6 +430,42 @@ now keys off `hasPersistedRequest`, which is the record on disk.
 Also fixed while there: the recovery screen numbered every step twice, once in a
 pill and once inside the step string.
 
+# Phases 15 to 18
+
+**Phase 15a and 15b.** `canOpenURL` answers false both for an app that is not
+installed and for a scheme string that is wrong, and those are not the same
+thing. Believing the second would tell a user to install what they are already
+holding, so a negative is only trusted once some scheme has been seen to return
+true on a real device. Until then the wizard treats "nothing detected" as
+unknown and offers both with a "Don't see your app?" line. The wizard is four
+pages and walks exactly one bridge per run.
+
+**Phase 15k.** Hand off is three states, re-probed on appearance, and Generate
+refuses an unverified bridge by name rather than failing somewhere in the middle
+of a round trip. Note the interaction with the Phase 15 migration: renaming the
+Shortcuts cleared every prior verification, so an existing user has to run
+Verify once before Generate works. That is the intended consequence of a rename
+that made the old bridge unreachable, not a regression.
+
+**Phase 17.** The per recording model picker is gone. It duplicated Settings and
+its only effect was to let a recording disagree with the setting that every
+other flow reads.
+
+**Phase 18.** Recognition succeeding and hearing nothing is now `empty`, its own
+terminal state, distinct from `failed`. Only a failure leaves a gap marker in
+the transcript: labelling silence "could not be transcribed" is what filled
+History with junk. Discarding is deliberately asymmetric, because the two
+mistakes cost different amounts. Sweeping a silent ten second recording costs
+nothing; sweeping a ninety minute meeting whose recogniser hit a thermal defer
+costs the meeting. So a failed segment is never swept, and silence over a minute
+is kept because it usually means a microphone problem the user needs to see.
+
+One deliberate exception, stated rather than buried: under three seconds
+discards whatever the state, including failed, because 18b says "always discard,
+whatever the state" and at that length there is no meeting to lose. E70 reads as
+an absolute; this is the one place it is not, and it is one line to change if
+that trade is wrong.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is

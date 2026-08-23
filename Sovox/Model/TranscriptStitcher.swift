@@ -30,7 +30,11 @@ enum TranscriptStitcher {
         for record in ordered {
             let text = record.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty {
-                if record.state.isTerminal {
+                // Phase 18a. A failed segment leaves a stated gap, because the
+                // words existed and were lost. A silent one leaves nothing,
+                // because there were no words: labelling silence "could not be
+                // transcribed" is what filled History with junk.
+                if record.state.isFailure {
                     pieces.append((record.index, placeholder(for: record.index)))
                 }
                 continue

@@ -22,11 +22,19 @@ struct SetupWizardView: View {
     @State private var permissionsTick = 0
     @State private var previewExpanded = false
     @State private var manualTestNote: String?
+    /// Which bridge this run is setting up. Never both: walking a user through
+    /// two bridges when they have one app is how the old wizard wasted their
+    /// time.
+    @State private var chosenBridge: AIDestination?
+    @State private var availability: ModelAppAvailability = .unknown
     /// Ticked sub steps, kept across launches so a user can stop halfway.
     @State private var checkedSteps: Set<String> = Set(
         UserDefaults.standard.stringArray(forKey: "sovox.setupChecked") ?? [])
 
-    private let lastStep = 4
+    /// Four pages now, and the dots follow the children rather than a constant:
+    /// only one bridge is ever walked through in a run, so the old fifth page
+    /// is gone.
+    private let lastStep = 3
 
     var body: some View {
         @Bindable var settings = settings
@@ -37,9 +45,8 @@ struct SetupWizardView: View {
                 TabView(selection: $step) {
                     detailsStep(settings: settings).tag(0)
                     permissionsStep.tag(1)
-                    bridgeStep(for: .chatgpt).tag(2)
-                    bridgeStep(for: .claude).tag(3)
-                    actionButtonStep.tag(4)
+                    modelBridgePage.tag(2)
+                    actionButtonStep.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
             }
@@ -65,7 +72,7 @@ struct SetupWizardView: View {
     private func detailsStep(settings: AppSettings) -> some View {
         @Bindable var settings = settings
         return stepScaffold(title: "About you",
-                            blurb: "Your name is excluded from the attendees the AI infers. Your work email prefills the Outlook draft.") {
+                            blurb: "Transcripts are sent to this email.") {
             VStack(spacing: 12) {
                 TextField("Full name", text: $settings.fullName)
                     .textContentType(.name)
@@ -113,6 +120,75 @@ struct SetupWizardView: View {
 
 
     // MARK: Steps 3 and 4
+
+    // MARK: Page 3, whichever bridge applies
+
+    @ViewBuilder
+    private var modelBridgePage: some View {
+        Group {
+            switch availability {
+            case .none:
+                noModelAppPage
+            case .only(let destination):
+                bridgeStep(for: destination)
+            case .both, .unknown:
+                if let chosen = chosenBridge {
+                    bridgeStep(for: chosen)
+                } else {
+                    chooserPage
+                }
+            }
+        }
+        // Re-probed every time the page appears. Apps get installed mid setup.
+        .onAppear { refreshAvailability() }
+    }
+
+    private func refreshAvailability() {
+        availability = ModelAppProbe.availability()
+        if case .only(let destination) = availability {
+            chosenBridge = destination
+            settings.destination = destination
+        }
+    }
+
+    private var noModelAppPage: some View {
+        stepScaffold(title: "Model app",
+                     blurb: "Sovox needs the ChatGPT app or the Claude app to turn transcripts into notes. Install either one, then come back.") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Recording and transcription work without it. Only note generation is blocked.")
+                    .font(.footnote)
+                    .foregroundStyle(SovoxPalette.dim)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glassCard(cornerRadius: 16)
+                GlassActionButton(title: "Check again", systemImage: "arrow.clockwise", tint: nil) {
+                    refreshAvailability()
+                }
+            }
+        }
+    }
+
+    private var chooserPage: some View {
+        stepScaffold(title: "Which would you like to use?",
+                     blurb: "You can add the other later in Settings.") {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(AIDestination.allCases) { destination in
+                    GlassActionButton(title: destination.title,
+                                      systemImage: "sparkles",
+                                      tint: SovoxPalette.accent) {
+                        chosenBridge = destination
+                        settings.destination = destination
+                    }
+                }
+                if availability == .unknown {
+                    Text("Don't see your app? Pick the one you have. Sovox could not detect either, which usually just means it cannot see them, not that they are missing.")
+                        .font(.caption)
+                        .foregroundStyle(SovoxPalette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
 
     private func bridgeStep(for destination: AIDestination) -> some View {
         stepScaffold(title: "\(destination.title) bridge",
@@ -378,17 +454,15 @@ struct SetupWizardView: View {
 
     private var actionButtonStep: some View {
         stepScaffold(title: "Action Button",
-                     blurb: "Optional. There is no public API to deep link into this screen, so it has to be done by hand.") {
+                     blurb: "Optional. For quick access when you need it.") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Settings, Action Button, Shortcuts, then pick Sovox: Toggle Sovox.")
+                Text("Settings, Action Button, Shortcuts, then Sovox: Toggle Sovox.")
                     .font(.callout)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .glassCard(cornerRadius: 16)
 
-                GlassActionButton(title: "Opens Settings, navigate to Action Button from there",
-                                  systemImage: "gearshape",
-                                  tint: nil) {
+                GlassActionButton(title: "Open Settings", systemImage: "gearshape", tint: nil) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }

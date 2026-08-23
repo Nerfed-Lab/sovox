@@ -131,6 +131,20 @@ struct RecordView: View {
                 .padding(.horizontal, 20)
             }
 
+            if let notice = recorder.discardNotice {
+                Label(notice, systemImage: "trash")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(SovoxPalette.dim)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .glassCard(cornerRadius: 16)
+                    .padding(.horizontal, 20)
+                    .task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        recorder.discardNotice = nil
+                    }
+            }
+
             if let notice = recorder.liveActivityNotice {
                 Text(notice)
                     .font(.footnote)

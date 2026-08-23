@@ -41,6 +41,8 @@ struct SegmentChips: View {
                 Image(systemName: "thermometer.medium").font(.caption2)
             case .done:
                 Image(systemName: "checkmark").font(.caption2.weight(.bold))
+            case .empty:
+                Image(systemName: "speaker.slash").font(.caption2)
             case .failed:
                 Image(systemName: "exclamationmark.triangle").font(.caption2)
             }

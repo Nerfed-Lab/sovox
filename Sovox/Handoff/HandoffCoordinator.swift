@@ -288,6 +288,13 @@ final class HandoffCoordinator {
             phase = .failed("Pick at least one output type.")
             return
         }
+        // Phase 15k. An unverified bridge fails somewhere in the middle of a
+        // round trip, with the user staring at Shortcuts wondering what broke.
+        // Say it here, where it is actionable.
+        guard settings.isBridgeVerified(destination) else {
+            phase = .failed("\(destination.title) bridge isn't set up, open Settings to finish it.")
+            return
+        }
         // Placeholders are not a transcript. Handing them over produces notes
         // for a meeting nobody heard, in a draft addressed to a real work
         // address.

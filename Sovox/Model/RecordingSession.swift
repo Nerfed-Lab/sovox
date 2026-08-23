@@ -12,13 +12,18 @@ enum SegmentState: Codable, Equatable, Sendable {
     case pending
     case running
     case done
+    /// Phase 18a. Transcription SUCCEEDED and heard nothing. Not a failure:
+    /// History was filling with rows reading "could not be transcribed" for
+    /// recordings where nothing was ever said, which is a different thing from
+    /// a recogniser that fell over.
+    case empty
     case failed(reason: String)
     /// Held back by the thermal guard. Not an error, and it retries itself.
     case deferred(reason: String)
 
     var isTerminal: Bool {
         switch self {
-        case .done, .failed: return true
+        case .done, .empty, .failed: return true
         case .pending, .running, .deferred: return false
         }
     }
@@ -28,10 +33,13 @@ enum SegmentState: Codable, Equatable, Sendable {
         return false
     }
 
+    /// Heard nothing, and said so successfully.
+    var isEmptyResult: Bool { self == .empty }
+
     var reason: String? {
         switch self {
         case .failed(let r), .deferred(let r): return r
-        case .pending, .running, .done: return nil
+        case .pending, .running, .done, .empty: return nil
         }
     }
 
@@ -40,6 +48,7 @@ enum SegmentState: Codable, Equatable, Sendable {
         case .pending: return "Queued"
         case .running: return "Transcribing"
         case .done: return "Done"
+        case .empty: return "No speech"
         case .failed: return "Failed"
         case .deferred: return "Paused, device warm"
         }
@@ -201,6 +210,50 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
         // persisted transcript is still better than an empty document.
         if stitched.isEmpty && !transcript.isEmpty { return transcript }
         return stitched
+    }
+
+    // MARK: Phase 18, what to do with a recording that produced nothing
+
+    enum DiscardVerdict: Equatable, Sendable {
+        case keep
+        /// Deleted outright, audio and History row together.
+        case discard(String)
+
+        var discards: Bool { if case .discard = self { return true }; return false }
+    }
+
+    var hasFailedSegment: Bool { segments.contains { $0.state.isFailure } }
+
+    /// Every segment finished and none of them heard anything.
+    var isSilent: Bool {
+        !segments.isEmpty && segments.allSatisfy { $0.state.isEmptyResult }
+    }
+
+    /// Phase 18b and 18c.
+    ///
+    /// The asymmetry is deliberate. Discarding costs the user nothing when
+    /// nothing was said, and costs them a meeting when something was: a failed
+    /// segment can be retried and often succeeds, so it is never swept, and a
+    /// long silent recording is kept because silence over a minute usually
+    /// means a microphone problem the user needs to see.
+    ///
+    /// The under three seconds rule fires whatever the state, per 18b. At that
+    /// length there is no meeting to lose, and it is what a mis-tap on the
+    /// Action Button produces.
+    var discardVerdict: DiscardVerdict {
+        guard source == .recorded, isComplete else { return .keep }
+        if duration < 3 { return .discard("under three seconds") }
+        guard !hasFailedSegment else { return .keep }
+        if isSilent && duration < 60 { return .discard("no speech, under a minute") }
+        return .keep
+    }
+
+    /// What History says about a recording with no usable transcript.
+    var emptyStateLabel: String? {
+        guard source == .recorded, isComplete else { return nil }
+        if hasFailedSegment { return "Transcription failed, tap to retry" }
+        if isSilent { return "No speech detected" }
+        return nil
     }
 
     /// True when the transcript holds something somebody actually said, rather

@@ -143,11 +143,21 @@ struct HistoryView: View {
                     .font(.caption2)
                     .foregroundStyle(SovoxPalette.dim)
             }
-            let preview = TranscriptStitcher.preview(session.stitchedTranscript)
-            Text(preview.isEmpty ? "Not transcribed yet" : preview)
-                .font(.footnote)
-                .foregroundStyle(SovoxPalette.dim)
-                .lineLimit(1)
+            // Phase 18. A recording that heard nothing and one whose recogniser
+            // fell over are different things, and only one of them is worth
+            // retrying. Neither is "could not be transcribed".
+            if let state = session.emptyStateLabel {
+                Label(state, systemImage: session.hasFailedSegment ? "arrow.clockwise" : "speaker.slash")
+                    .font(.footnote)
+                    .foregroundStyle(session.hasFailedSegment ? SovoxPalette.paused : SovoxPalette.dim)
+                    .lineLimit(1)
+            } else {
+                let preview = TranscriptStitcher.preview(session.stitchedTranscript)
+                Text(preview.isEmpty ? "Not transcribed yet" : preview)
+                    .font(.footnote)
+                    .foregroundStyle(SovoxPalette.dim)
+                    .lineLimit(1)
+            }
         }
         .padding(.vertical, 4)
     }
