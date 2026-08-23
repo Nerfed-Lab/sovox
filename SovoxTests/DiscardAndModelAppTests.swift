@@ -146,3 +146,62 @@ final class ModelAppProbeTests: XCTestCase {
         XCTAssertTrue(ModelAppAvailability.only(.claude).detectedAny)
     }
 }
+
+/// The audit found the discard rule deleting real meetings. A duration of zero
+/// is the persisted default, not a measurement, and a force quit during the
+/// first segment carries it for as long as an hour.
+final class UnmeasuredDurationTests: XCTestCase {
+
+    private func crashRecovered(_ state: SegmentState) -> RecordingSession {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.duration = 0
+        s.segments = [SegmentRecord(index: 1, fileName: "seg-01.m4a",
+                                    duration: 0, state: state, text: "")]
+        return s
+    }
+
+    func testAnUnmeasuredRecordingIsNeverSwept() {
+        // The exact chain: jetsam mid segment, orphan file adopted with no
+        // duration, its moov atom missing so verification throws.
+        XCTAssertFalse(crashRecovered(.failed(reason: "unreadable")).discardVerdict.discards,
+                       "this was deleting meetings up to an hour long")
+        XCTAssertFalse(crashRecovered(.empty).discardVerdict.discards)
+        XCTAssertFalse(crashRecovered(.done).discardVerdict.discards)
+    }
+
+    func testRetryingAFailedRecordingCannotDeleteIt() {
+        var s = crashRecovered(.failed(reason: "unreadable"))
+        XCTAssertEqual(s.emptyStateLabel, "Transcription failed, tap to retry")
+        // Following the app's own instruction must not destroy the audio.
+        XCTAssertFalse(s.discardVerdict.discards)
+        s.duration = 1800
+        XCTAssertFalse(s.discardVerdict.discards, "still failed, still kept")
+    }
+
+    func testAMeasuredMisTapIsStillSwept() {
+        var s = crashRecovered(.empty)
+        s.duration = 1.2
+        XCTAssertTrue(s.discardVerdict.discards, "18b still holds for a real measurement")
+    }
+
+    func testASilentSegmentNoLongerBlocksAudioDeletion() {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.duration = 300
+        s.segments = [SegmentRecord(index: 1, fileName: "seg-01.m4a", duration: 150, state: .done, text: "words"),
+                      SegmentRecord(index: 2, fileName: "seg-02.m4a", duration: 150, state: .empty, text: "")]
+        XCTAssertTrue(s.isFullyTranscribed, "a quiet stretch is finished, not pending")
+        XCTAssertTrue(s.canDeleteAudio)
+    }
+
+    func testAFailedSegmentStillBlocksAudioDeletion() {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.duration = 300
+        s.segments = [SegmentRecord(index: 1, fileName: "seg-01.m4a", duration: 300,
+                                    state: .failed(reason: "x"), text: "")]
+        XCTAssertFalse(s.isFullyTranscribed)
+        XCTAssertFalse(s.canDeleteAudio, "the audio is still the only copy of those minutes")
+    }
+}

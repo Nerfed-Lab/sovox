@@ -117,14 +117,15 @@ actor TranscriptionService {
             notify(job, .running)
 
             do {
-                try await SegmentFinalisation.verify(url: job.fileURL)
-                // A segment adopted from disk carries no duration, because the
-                // engine that would have timed it died with the app. The file
-                // knows, and it is already open here.
+                // Measured BEFORE verification, deliberately. A file killed
+                // mid write fails verification, and if the duration were only
+                // taken afterwards the session would keep the zero it was
+                // created with, which is indistinguishable from a stray tap.
                 if job.expectedDuration <= 0 {
                     let measured = await SegmentFinalisation.duration(of: job.fileURL)
                     if measured > 0 { await measure(job, seconds: measured) }
                 }
+                try await SegmentFinalisation.verify(url: job.fileURL)
                 let text = try await SegmentTranscriber.shared.transcribe(
                     fileURL: job.fileURL,
                     expectedDuration: job.expectedDuration,

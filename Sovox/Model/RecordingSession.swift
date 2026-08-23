@@ -156,7 +156,11 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
     /// only means nothing is still in flight: a permanently failed segment is
     /// terminal but has no text.
     var isFullyTranscribed: Bool {
-        !segments.isEmpty && segments.allSatisfy { $0.state == .done }
+        // A silent segment is finished, not pending: transcription ran and
+        // there was nothing to hear. Requiring .done here meant any recording
+        // with a quiet stretch could never have its audio deleted, which is a
+        // regression the .empty state introduced.
+        !segments.isEmpty && segments.allSatisfy { $0.state == .done || $0.state == .empty }
     }
 
     /// Audio may only be discarded once every segment has actually succeeded.
@@ -242,6 +246,13 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
     /// Action Button produces.
     var discardVerdict: DiscardVerdict {
         guard source == .recorded, isComplete else { return .keep }
+        // A duration of zero means never measured, not zero seconds. It is the
+        // persisted default, and a recording that was force quit during its
+        // first segment carries it for as long as an hour. Treating that as a
+        // mis-tap deleted real meetings: the segment file has no moov atom, so
+        // verification fails, the measure step never runs, and a 30 minute
+        // recording arrives here looking like a stray tap.
+        guard duration > 0 else { return .keep }
         if duration < 3 { return .discard("under three seconds") }
         guard !hasFailedSegment else { return .keep }
         if isSilent && duration < 60 { return .discard("no speech, under a minute") }

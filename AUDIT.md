@@ -466,6 +466,31 @@ whatever the state" and at that length there is no meeting to lose. E70 reads as
 an absolute; this is the one place it is not, and it is one line to change if
 that trade is wrong.
 
+# Phase 18, the bug the audit caught after build 7 was already uploaded
+
+**The mis-tap rule was deleting real meetings.** `duration < 3` fired whenever
+duration was zero, and zero is the persisted default, not a measurement. The
+chain, all of it ordinary: the app is force quit during segment one, so the
+manifest still holds `duration: 0` because it is only rewritten at a segment
+boundary, which with the default thirty minute segment is up to an hour away.
+`reconcile` adopts the orphan file with duration zero. `resumeUnfinishedTranscriptions`
+marks the session complete and sums the segments to zero. The file was killed
+mid write so it has no moov atom, verification throws, the segment is marked
+failed, and the measure step, which ran after verification, never happens. The
+verdict then reads a thirty minute meeting as a stray tap and deletes the
+directory. The retroactive sweep did the same at first launch, and the row's own
+"tap to retry" label led the user straight into it.
+
+Fixed three ways: an unmeasured duration is never swept, the duration is
+measured before verification can throw so a recovered session stops looking like
+a tap, and the tests now cover duration zero, which is the only case that
+mattered and the one the original tests skipped.
+
+**A silent segment blocked audio deletion.** `isFullyTranscribed` still required
+`.done`, so once silence became its own state any recording with a quiet stretch
+could never have its audio deleted. `.empty` counts as finished now, because
+transcription ran and there was nothing to hear.
+
 # Deviations from the spec, stated rather than buried
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
