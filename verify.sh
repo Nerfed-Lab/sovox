@@ -159,6 +159,16 @@ fi
 if [ -f Sovox/UI/BridgeMigrationView.swift ] && grep -q 'BridgeMigrationView' Sovox/UI/RootView.swift; then
   note "E59 migration card present" "PASS"; else note "E59 migration card" "FAIL"; fail=1; fi
 
+echo "== E75 on device recognition =="
+# Server recognition is prohibited. Every SFSpeechRecognitionRequest must set
+# the flag true, and the assertion has to sit next to it.
+bad=$(grep -rn "requiresOnDeviceRecognition = false" --include='*.swift' Sovox/ SovoxShared/ | wc -l | tr -d ' ')
+if [ "$bad" = "0" ] && grep -q "precondition(request.requiresOnDeviceRecognition" Sovox/Transcription/SegmentTranscriber.swift; then
+  note "E75 on device only, asserted" "PASS"
+else
+  note "E75 on device recognition" "FAIL"; fail=1
+fi
+
 echo "== E10 colour tokens =="
 stray=$(grep -rlE "0x[0-9A-Fa-f]{6}" --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ 2>/dev/null \
         | grep -v "Theme.swift\|WidgetPalette.swift" | wc -l | tr -d ' ')

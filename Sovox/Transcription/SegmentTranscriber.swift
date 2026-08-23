@@ -151,6 +151,12 @@ actor SegmentTranscriber {
         // Everything stays on the device. This is also the only mode that works
         // with the App Transport Security lockdown in Info.plist.
         request.requiresOnDeviceRecognition = true
+        // Phase 19a absolute rule. Server recognition is prohibited outright,
+        // and a request that reaches Apple's servers would breach the zero
+        // network guarantee the whole app is built on. Asserted rather than
+        // trusted, because the flag is a plain Bool one edit away from false.
+        precondition(request.requiresOnDeviceRecognition,
+                     "speech request would be allowed to leave the device")
         request.addsPunctuation = true
         request.taskHint = .dictation
 

@@ -74,6 +74,14 @@ struct SettingsView: View {
                         }
                     }
 
+                    Section("Diagnostics") {
+                        NavigationLink {
+                            SpeechCapabilityView()
+                        } label: {
+                            Label("Speech capability", systemImage: "waveform.badge.magnifyingglass")
+                        }
+                    }
+
                     Section("Appearance") {
                         Picker("Theme", selection: $settings.appearance) {
                             ForEach(AppearanceMode.allCases) { mode in
