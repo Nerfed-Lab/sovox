@@ -66,6 +66,56 @@ enum PromptBuilder {
         return actions.map(wrapper(for:)).joined(separator: "\n\n")
     }
 
+    /// Phase 19g. Sits immediately before the merged transcript, and only
+    /// there: with the toggle off the prompt is byte for byte what it was.
+    static let mergedPreamble = """
+    MERGED TRANSCRIPT
+    This audio was transcribed twice, once by an English model, once by a Hindi
+    model. Both are complete readings of the same conversation, aligned by
+    pauses. EN is always Latin script, HI always Devanagari.
+
+    Roughly 70% of this conversation is English and 30% is Hindi, with speakers
+    switching at clause boundaries. So each block will have one accurate reading
+    and one poor one:
+    - Where English was spoken, EN is correct and HI is that English
+      transliterated into Devanagari.
+    - Where Hindi was spoken, HI is correct and EN is that Hindi forced
+      phonetically onto English words, which will read as nonsense.
+
+    For each block, decide what was actually said and use the better reading.
+    Where both look plausible, prefer EN: English is the majority language and
+    that model is more reliable on this audio. Where neither is coherent, write
+    [unclear] rather than inventing meaning by combining two garbled readings.
+    Proper nouns, client names, acronyms and technical terms will look wrong in
+    BOTH; leave them as EN rendered them and never recover Hindi from a name.
+
+    Rendering:
+    - In CLEANED TRANSCRIPT, render Hindi as correctly spelled romanised Hindi
+      in Latin script. Do not translate it and do not add a gloss, the reader
+      speaks Hindi.
+    - In every other section, express everything in English.
+    - Never output Devanagari or any non Latin script.
+    - Do not mention the merge, the two models, the EN and HI labels or the
+      timestamps. They are scaffolding, not content.
+    """
+
+    /// Phase 19h stage 1. Local work only: reconcile the two readings of ONE
+    /// segment. No summarising, because summarising is global and a segment is
+    /// not the conversation.
+    static func resolutionPrompt(merged: String) -> String {
+        [
+            "Resolve the two readings below into one clean transcript.",
+            mergedPreamble,
+            fenced(merged),
+            transcriptDataNotice,
+            """
+            Output the resolved transcript and nothing else. Latin script only,
+            Hindi romanised, filler removed. No summary, no analysis, no
+            headings, no commentary.
+            """
+        ].joined(separator: "\n\n")
+    }
+
     /// Phase 11 assembly order, exactly:
     /// 1 opening line and GLOBAL RULES, 2 conversation type, 3 TRANSCRIPT,
     /// 4 MY NAME and REQUESTED OUTPUTS, 5 the two required header lines,
@@ -77,7 +127,8 @@ enum PromptBuilder {
                       conversationType: ConversationType = .auto,
                       ownName: String,
                       date: Date = Date(),
-                      timeZone: TimeZone = .current) -> String {
+                      timeZone: TimeZone = .current,
+                      merged: Bool = false) -> String {
         let day = SubjectBuilder.dateFormatter(timeZone: timeZone).string(from: date)
         let time = SubjectBuilder.timeFormatter(timeZone: timeZone).string(from: date)
         let selected = OutputMode.allCases.filter { modes.contains($0) }
@@ -101,6 +152,11 @@ enum PromptBuilder {
 
         blocks.append(conversationType.promptBlock)
 
+        // 19g. The preamble goes immediately before the transcript block, and
+        // only when there are two readings to reconcile. Stage 2 of a long
+        // recording omits it, because by then there is nothing left to
+        // reconcile.
+        if merged { blocks.append(PromptBuilder.mergedPreamble) }
         blocks.append(PromptBuilder.fenced(transcript))
         blocks.append(PromptBuilder.transcriptDataNotice)
 

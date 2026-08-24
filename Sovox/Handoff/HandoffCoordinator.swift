@@ -6,6 +6,8 @@ import UIKit
 /// to know whether the answer belongs to the Outlook draft or to the Ask thread.
 enum BridgePurpose: String, Codable, Sendable {
     case notes
+    /// Phase 19h stage 1: reconcile one segment's two readings, nothing else.
+    case resolve
     case ask
     case todos
     case verify
@@ -126,6 +128,23 @@ final class HandoffCoordinator {
     /// Identifies the current verify run, so a timeout from an earlier one
     /// cannot overwrite the outcome of a later one.
     private var verifyToken = UUID()
+    /// Phase 19h. The multi stage plan, persisted because each stage leaves
+    /// the app entirely and a jetsam between stages must not lose the segments
+    /// already resolved.
+    private(set) var stagedPlan: StagedGeneration? {
+        didSet {
+            let defaults = UserDefaults.standard
+            if let stagedPlan, let data = try? JSONEncoder().encode(stagedPlan) {
+                defaults.set(data, forKey: Keys.stagedPlan)
+            } else {
+                defaults.removeObject(forKey: Keys.stagedPlan)
+            }
+        }
+    }
+    /// Names which segment failed, so a retry can be offered for that one alone
+    /// rather than silently proceeding with a gap.
+    private(set) var stagedFailure: String?
+
     /// Phase 15f. Set when a manual test prompt has been written and the user
     /// has been told to run the Shortcut themselves.
     private(set) var manualTestArmed = false
@@ -179,6 +198,7 @@ final class HandoffCoordinator {
         static let strandedAnswer = "sovox.handoff.strandedAnswer"
         static let strandedQuestion = "sovox.handoff.strandedQuestion"
         static let strandedTodos = "sovox.handoff.strandedTodos"
+        static let stagedPlan = "sovox.handoff.stagedPlan"
         static let todoSources = "sovox.handoff.todoSources"
     }
 
@@ -264,6 +284,96 @@ final class HandoffCoordinator {
         !modes.isEmpty || !customActions.isEmpty
     }
 
+    // MARK: Phase 19h, staged generation
+
+    func restoreStagedPlan() {
+        guard stagedPlan == nil,
+              let data = UserDefaults.standard.data(forKey: Keys.stagedPlan),
+              let plan = try? JSONDecoder().decode(StagedGeneration.self, from: data) else { return }
+        stagedPlan = plan
+    }
+
+    func cancelStagedPlan() {
+        stagedPlan = nil
+        stagedFailure = nil
+    }
+
+    /// Sends the next segment out for resolution, or, when every segment is
+    /// resolved, runs the ordinary master prompt once over the whole thing.
+    func advanceStagedPlan(settings: AppSettings, store: RecordingStore) {
+        guard let plan = stagedPlan else { return }
+        guard let session = store.session(id: plan.sessionID) else {
+            stagedFailure = "That recording is gone."
+            cancelStagedPlan()
+            return
+        }
+        guard !isInFlight else { return }
+
+        if let next = plan.nextSegment {
+            guard let segment = session.segments.first(where: { $0.index == next }) else {
+                stagedFailure = "Segment \(next) is missing."
+                return
+            }
+            let merged = TranscriptMerge.render(segment.mergedWindows)
+            send(prompt: PromptBuilder.resolutionPrompt(merged: merged),
+                 purpose: .resolve,
+                 sessionID: plan.sessionID,
+                 destination: AIDestination(rawValue: plan.destination) ?? settings.destination)
+            return
+        }
+
+        // Stage 2. One call, over the whole conversation, with the
+        // reconciliation preamble omitted: there is nothing left to reconcile.
+        let modes = Set(plan.modes.compactMap(OutputMode.init(rawValue:)))
+        let actions = settings.customActions.filter { plan.customActionIDs.contains($0.id.uuidString) }
+        let prompt = PromptBuilder.build(transcript: plan.resolvedTranscript,
+                                         modes: modes,
+                                         customActions: actions,
+                                         conversationType: ConversationType(rawValue: plan.conversationType) ?? .auto,
+                                         ownName: settings.fullName,
+                                         date: session.startDate,
+                                         merged: false)
+        cancelStagedPlan()
+        send(prompt: prompt,
+             purpose: .notes,
+             sessionID: plan.sessionID,
+             destination: AIDestination(rawValue: plan.destination) ?? settings.destination)
+    }
+
+    func retryStagedSegment(settings: AppSettings, store: RecordingStore) {
+        stagedFailure = nil
+        advanceStagedPlan(settings: settings, store: store)
+    }
+
+    /// The one place a prompt is written and the bridge is opened.
+    private func send(prompt: String, purpose: BridgePurpose, sessionID: String?, destination: AIDestination) {
+        guard UIApplication.shared.applicationState == .active else {
+            phase = .failed("Sovox can only hand off while it is on screen.")
+            return
+        }
+        do {
+            try prompt.write(to: RecordingPaths.pendingPromptFile, atomically: true, encoding: .utf8)
+        } catch {
+            phase = .failed("Could not write \(RecordingPaths.pendingPromptFile.lastPathComponent). \(error.localizedDescription)")
+            return
+        }
+        clearResultFile()
+        guard shortcutsInstalled, let url = bridgeURL(for: destination) else {
+            phase = .needsShortcutSetup(destination)
+            return
+        }
+        self.destination = destination
+        self.purpose = purpose
+        self.sessionID = sessionID
+        requestStartedAt = Date()
+        persistInFlightRequest()
+        phase = .waitingForBridge
+        UIApplication.shared.open(url, options: [:]) { [weak self] opened in
+            guard let self, !opened else { return }
+            Task { @MainActor in self.phase = .needsShortcutSetup(destination) }
+        }
+    }
+
     /// Step one. Writes the prompt where the Shortcut can read it, then hands
     /// control to Shortcuts. Only ever called while the app is foreground.
     func generate(session: RecordingSession,
@@ -271,7 +381,8 @@ final class HandoffCoordinator {
                   customActions: [CustomAction] = [],
                   conversationType: ConversationType = .auto,
                   destination: AIDestination,
-                  settings: AppSettings) {
+                  settings: AppSettings,
+                  store: RecordingStore = .shared) {
         guard !isInFlight else {
             busyNoticeText = "Another request is still running. Wait for it to come back, or cancel it."
             return
@@ -305,18 +416,36 @@ final class HandoffCoordinator {
             return
         }
 
+        self.askQuestion = nil
+
+        // Phase 19h. Above the threshold the merged transcript is split into a
+        // resolution pass per segment and one synthesis over the whole thing.
+        // Below it, and whenever there is only one reading, this is exactly the
+        // single call it has always been.
+        if StagedGeneration.isNeeded(for: session) {
+            stagedFailure = nil
+            stagedPlan = StagedGeneration.plan(for: session,
+                                               modes: modes,
+                                               customActions: customActions,
+                                               conversationType: conversationType,
+                                               destination: destination)
+            advanceStagedPlan(settings: settings, store: store)
+            return
+        }
+
         self.destination = destination
         self.sessionID = session.id
         self.purpose = .notes
-        self.askQuestion = nil
 
-        let transcript = session.stitchedTranscript
+        let merged = session.hasMergedReading
+        let transcript = merged ? session.mergedTranscript : session.stitchedTranscript
         let prompt = PromptBuilder.build(transcript: transcript,
                                          modes: modes,
                                          customActions: customActions,
                                          conversationType: conversationType,
                                          ownName: settings.fullName,
-                                         date: session.startDate)
+                                         date: session.startDate,
+                                         merged: merged)
 
         do {
             try prompt.write(to: RecordingPaths.pendingPromptFile, atomically: true, encoding: .utf8)
@@ -556,6 +685,23 @@ final class HandoffCoordinator {
                 settings.markBridgeVerified(verifyingDestination ?? destination)
             } else {
                 verifyOutcome = .unexpectedContent(raw)
+            }
+            clearInFlightRequest()
+            phase = .idle
+            return
+        }
+
+        if purpose == .resolve {
+            restoreStagedPlan()
+            let resolved = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if var plan = stagedPlan, let next = plan.nextSegment {
+                if resolved.isEmpty {
+                    // Never proceed with a gap. Name the segment and stop.
+                    stagedFailure = "Segment \(next) came back empty. Retry just that segment."
+                } else {
+                    plan.resolved[next] = resolved
+                    stagedPlan = plan
+                }
             }
             clearInFlightRequest()
             phase = .idle

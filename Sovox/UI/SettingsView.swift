@@ -8,6 +8,9 @@ struct SettingsView: View {
     /// Re-probed on every appearance, per 15k.
     @State private var modelApps: Set<AIDestination> = []
     @State private var wizardBridge: AIDestination?
+    /// Re-resolved on appearance: installing a dictation language does not tell
+    /// the app anything.
+    @State private var secondaryTier: SpeechTier = .three
     @State private var confirmAudioDelete = false
     @State private var showWizard = false
 
@@ -123,6 +126,28 @@ struct SettingsView: View {
                                 .font(.footnote.weight(.semibold))
                             }
                         }
+                        Toggle("Also transcribe in", isOn: $settings.dualLanguage)
+                            .disabled(secondaryTier == .three)
+                        if settings.dualLanguage {
+                            NavigationLink {
+                                TranscriptionLanguageView(selecting: .secondary)
+                            } label: {
+                                HStack {
+                                    Text("Secondary language")
+                                    Spacer()
+                                    Text(settings.secondaryLocale.isEmpty
+                                         ? "None"
+                                         : TranscriptionLocale.displayName(Locale(identifier: settings.secondaryLocale)))
+                                        .foregroundStyle(SovoxPalette.dim)
+                                }
+                            }
+                        }
+                        Text(secondaryTier == .three
+                             ? "Hindi transcription isn't available on this device."
+                             : "Transcribes twice and lets the AI decide. Slower, and uses more of the model's context.")
+                            .font(.caption)
+                            .foregroundStyle(SovoxPalette.dim)
+
                         if !TranscriptionLocale.isOnDeviceReady(settings.transcriptionLocale) {
                             VStack(alignment: .leading, spacing: 6) {
                                 Label("On device model not installed for this language",
@@ -232,6 +257,11 @@ struct SettingsView: View {
                         } label: {
                             Label("Prompt safety test", systemImage: "shield.lefthalf.filled")
                         }
+                        NavigationLink {
+                            MergePreviewView()
+                        } label: {
+                            Label("Merge preview", systemImage: "square.split.2x1")
+                        }
                     }
                     #endif
 
@@ -252,7 +282,11 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showWizard) { SetupWizardView() }
             .sheet(item: $wizardBridge) { bridge in SetupWizardView(startingBridge: bridge) }
-            .onAppear { modelApps = Set(AIDestination.allCases.filter { ModelAppProbe.isInstalled($0) }) }
+            .onAppear {
+                modelApps = Set(AIDestination.allCases.filter { ModelAppProbe.isInstalled($0) })
+                Task { secondaryTier = await SpeechCapabilityProbe.run(primary: settings.transcriptionLocale,
+                                                                       secondary: AppSettings.defaultSecondaryLocale).tier }
+            }
             .navigationTitle("Settings")
             .confirmationDialog("Delete all audio?",
                                 isPresented: $confirmAudioDelete,

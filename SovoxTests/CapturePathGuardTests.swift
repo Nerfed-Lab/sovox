@@ -60,8 +60,10 @@ final class CapturePathGuardTests: XCTestCase {
         // alternateLocaleIdentifier is a locale, the same kind of value as
         // localeIdentifier, added so an empty result can be retried on a
         // language known to work. Still no term list, still nothing to inject.
+        // secondaryLocaleIdentifier is Phase 19's second language. Still a
+        // locale, still no term list, still nothing to inject.
         XCTAssertEqual(fields, ["alternateLocaleIdentifier", "expectedDuration", "fileURL",
-                                "index", "localeIdentifier", "sessionID"])
+                                "index", "localeIdentifier", "secondaryLocaleIdentifier", "sessionID"])
         XCTAssertFalse(fields.contains { $0.lowercased().contains("vocab") || $0.lowercased().contains("hint") })
     }
 }

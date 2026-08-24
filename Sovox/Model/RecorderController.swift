@@ -74,8 +74,8 @@ final class RecorderController: SovoxCommandHandler {
                 onState: { [weak self] sessionID, index, state in
                     self?.transcriptionStateChanged(sessionID: sessionID, index: index, state: state)
                 },
-                onText: { [weak self] sessionID, index, text, locale in
-                    self?.transcriptionProduced(sessionID: sessionID, index: index, text: text, locale: locale)
+                onText: { [weak self] sessionID, index, reading in
+                    self?.transcriptionProduced(sessionID: sessionID, index: index, reading: reading)
                 },
                 onDrained: { [weak self] sessionID in
                     self?.transcriptionQueueDrained(sessionID: sessionID)
@@ -400,7 +400,8 @@ final class RecorderController: SovoxCommandHandler {
                                            fileURL: session.directory.appendingPathComponent(record.fileName),
                                            expectedDuration: duration,
                                            localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier),
-                                           alternateLocaleIdentifier: TranscriptionLocale.alternate(to: TranscriptionLocale.usable(session.localeIdentifier)))
+                                           alternateLocaleIdentifier: TranscriptionLocale.alternate(to: TranscriptionLocale.usable(session.localeIdentifier)),
+                                           secondaryLocaleIdentifier: settings.activeSecondaryLocale)
         Task { await TranscriptionService.shared.enqueue(job) }
     }
 
@@ -415,7 +416,8 @@ final class RecorderController: SovoxCommandHandler {
                                      fileURL: session.directory.appendingPathComponent(record.fileName),
                                      expectedDuration: record.duration,
                                      localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier),
-                                     alternateLocaleIdentifier: TranscriptionLocale.alternate(to: TranscriptionLocale.usable(session.localeIdentifier)))
+                                     alternateLocaleIdentifier: TranscriptionLocale.alternate(to: TranscriptionLocale.usable(session.localeIdentifier)),
+                                     secondaryLocaleIdentifier: settings.activeSecondaryLocale)
         }
         guard !jobs.isEmpty else { return false }
         Task { await TranscriptionService.shared.enqueue(jobs) }
@@ -545,11 +547,18 @@ extension RecorderController {
         }
     }
 
-    func transcriptionProduced(sessionID: String, index: Int, text: String, locale: String) {
+    func transcriptionProduced(sessionID: String, index: Int, reading: SegmentReading) {
         guard var session = store.session(id: sessionID),
               let slot = session.segments.firstIndex(where: { $0.index == index }) else { return }
-        session.segments[slot].text = text
-        session.segments[slot].localeUsed = locale
+        session.segments[slot].text = reading.primary.text
+        session.segments[slot].localeUsed = reading.localeUsed
+        session.segments[slot].primaryWords = reading.primary.words
+        // Phase 19e. The secondary reading is stored, and is only ever read
+        // when a prompt is being built. Everything else in the app, History,
+        // Ask, to-dos, counts and copy, sees the primary alone.
+        session.segments[slot].secondaryText = reading.secondary?.text
+        session.segments[slot].secondaryWords = reading.secondary?.words
+        session.segments[slot].secondaryFailed = reading.secondaryFailed ? true : nil
         session.transcript = session.stitchedTranscript
         store.upsert(session)
         if currentSession?.id == sessionID { currentSession = session }

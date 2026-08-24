@@ -15,7 +15,27 @@ final class AppSettings {
     var announceConsent: Bool { didSet { defaults.set(announceConsent, forKey: Keys.announceConsent) } }
     var sessionsStarted: Int { didSet { defaults.set(sessionsStarted, forKey: Keys.sessionsStarted) } }
     var customActions: [CustomAction] { didSet { persistCustomActions() } }
-    var transcriptionLocale: String { didSet { defaults.set(transcriptionLocale, forKey: Keys.transcriptionLocale) } }
+    var transcriptionLocale: String {
+        didSet {
+            defaults.set(transcriptionLocale, forKey: Keys.transcriptionLocale)
+            // 19b. The two languages cannot be the same, and picking a
+            // duplicate clears the other rather than silently transcribing the
+            // same audio twice with one model.
+            if TranscriptionLocale.normalise(secondaryLocale) == TranscriptionLocale.normalise(transcriptionLocale) {
+                secondaryLocale = ""
+            }
+        }
+    }
+    /// Phase 19b. Empty means none chosen.
+    var secondaryLocale: String {
+        didSet {
+            defaults.set(secondaryLocale, forKey: Keys.secondaryLocale)
+            if TranscriptionLocale.normalise(secondaryLocale) == TranscriptionLocale.normalise(transcriptionLocale) {
+                transcriptionLocale = TranscriptionLocale.defaultIdentifier
+            }
+        }
+    }
+    var dualLanguage: Bool { didSet { defaults.set(dualLanguage, forKey: Keys.dualLanguage) } }
     var verifiedBridges: Set<String> { didSet { defaults.set(Array(verifiedBridges), forKey: Keys.verifiedBridges) } }
     var setupCompleted: Bool { didSet { defaults.set(setupCompleted, forKey: Keys.setupCompleted) } }
     /// Phase 15h. True once, for a user who set up a bridge under the old
@@ -43,6 +63,8 @@ final class AppSettings {
         static let bridgeMigrationPending = "sovox.bridgeMigrationPending"
         static let bridgeNamesV15 = "sovox.bridgeNamesV15"
         static let transcriptionLocale = "sovox.transcriptionLocale"
+        static let secondaryLocale = "sovox.secondaryLocale"
+        static let dualLanguage = "sovox.dualLanguage"
     }
 
     static let segmentOptions = [15, 30, 60]
@@ -99,6 +121,10 @@ final class AppSettings {
             customActions = []
         }
         transcriptionLocale = defaults.string(forKey: Keys.transcriptionLocale) ?? TranscriptionLocale.defaultIdentifier
+        secondaryLocale = defaults.string(forKey: Keys.secondaryLocale) ?? AppSettings.defaultSecondaryLocale
+        // Defaults on where the device can actually do it, off where it cannot.
+        dualLanguage = defaults.object(forKey: Keys.dualLanguage) as? Bool
+            ?? (TranscriptionLocale.availability(AppSettings.defaultSecondaryLocale) == .ready)
         verifiedBridges = Set(defaults.stringArray(forKey: Keys.verifiedBridges) ?? [])
         setupCompleted = defaults.bool(forKey: Keys.setupCompleted)
         bridgeMigrationPending = defaults.bool(forKey: Keys.bridgeMigrationPending)
@@ -116,6 +142,23 @@ final class AppSettings {
     /// Ticked on the Transcript Ready screen without the user asking.
     var defaultCustomActionIDs: Set<UUID> {
         Set(customActions.filter(\.includeByDefault).map(\.id))
+    }
+
+    static let defaultSecondaryLocale = "hi_IN"
+
+    /// The secondary language a job should actually use, or nil.
+    ///
+    /// Nil whenever the feature is off, nothing is chosen, or the chosen
+    /// language cannot run without a network. The last one matters: an online
+    /// only secondary would produce nothing on every segment and the merge
+    /// would silently become a single reading.
+    var activeSecondaryLocale: String? {
+        guard dualLanguage else { return nil }
+        let wanted = TranscriptionLocale.normalise(secondaryLocale)
+        guard !wanted.isEmpty,
+              wanted != TranscriptionLocale.normalise(transcriptionLocale),
+              TranscriptionLocale.availability(wanted) == .ready else { return nil }
+        return wanted
     }
 
     func isBridgeVerified(_ destination: AIDestination) -> Bool {

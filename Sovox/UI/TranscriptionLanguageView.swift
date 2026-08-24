@@ -5,8 +5,12 @@ import SwiftUI
 /// language is a trap, because the request is forced on device, hears nothing,
 /// and every recording comes back reading as silence.
 struct TranscriptionLanguageView: View {
+    enum Slot { case primary, secondary }
+    var selecting: Slot = .primary
+
     @Environment(AppSettings.self) private var settings
     @State private var states: [String: TranscriptionLocale.Availability] = [:]
+    @State private var installing: String?
 
     private var locales: [Locale] { TranscriptionLocale.supported() }
 
@@ -28,6 +32,17 @@ struct TranscriptionLanguageView: View {
         // Re-queried on every appearance. Installing a dictation language does
         // not tell the app anything.
         .onAppear(perform: refresh)
+        .sheet(item: Binding(get: { installing.map { LocaleBox(id: $0) } },
+                             set: { installing = $0?.id })) { box in
+            LanguageInstallView(identifier: box.id) { chosen in
+                switch selecting {
+                case .primary: settings.transcriptionLocale = chosen
+                case .secondary: settings.secondaryLocale = chosen
+                }
+                installing = nil
+                refresh()
+            }
+        }
     }
 
     private func refresh() {
@@ -59,10 +74,17 @@ struct TranscriptionLanguageView: View {
 
     private func row(_ locale: Locale, availability: TranscriptionLocale.Availability) -> some View {
         let id = TranscriptionLocale.normalise(locale.identifier)
-        let selected = TranscriptionLocale.normalise(settings.transcriptionLocale) == id
+        let current = selecting == .primary ? settings.transcriptionLocale : settings.secondaryLocale
+        let selected = TranscriptionLocale.normalise(current) == id
         return Button {
             guard availability.isSelectable else { return }
-            settings.transcriptionLocale = id
+            // Needs install is selectable, but the steps come first: choosing it
+            // silently would produce nothing until the asset arrives.
+            if availability == .needsInstall { installing = id; return }
+            switch selecting {
+            case .primary: settings.transcriptionLocale = id
+            case .secondary: settings.secondaryLocale = id
+            }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -83,3 +105,6 @@ struct TranscriptionLanguageView: View {
         .disabled(!availability.isSelectable)
     }
 }
+
+/// Identifiable wrapper so a locale identifier can drive a sheet.
+struct LocaleBox: Identifiable, Equatable { var id: String }

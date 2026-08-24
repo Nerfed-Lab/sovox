@@ -5,7 +5,16 @@ import Foundation
 /// send it back across the boundary under Swift 6 strict concurrency, and the
 /// closures keep the service testable without knowing who consumes it.
 typealias TranscriptionStateHandler = @Sendable @MainActor (String, Int, SegmentState) -> Void
-typealias TranscriptionTextHandler = @Sendable @MainActor (String, Int, String, String) -> Void
+/// What one segment produced: the canonical reading, and optionally a second
+/// language reading of the same audio.
+struct SegmentReading: Sendable {
+    var primary: TranscriptionOutcome
+    var secondary: TranscriptionOutcome?
+    var localeUsed: String
+    var secondaryFailed: Bool = false
+}
+
+typealias TranscriptionTextHandler = @Sendable @MainActor (String, Int, SegmentReading) -> Void
 typealias TranscriptionDrainHandler = @Sendable @MainActor (String) -> Void
 /// Duration read off the file itself, for segments the app adopted from disk
 /// after a force quit and therefore never timed.
@@ -33,6 +42,11 @@ actor TranscriptionService {
         var localeIdentifier: String = TranscriptionLocale.defaultIdentifier
         /// Tried once, and only when the first pass hears nothing at all.
         var alternateLocaleIdentifier: String?
+        /// Phase 19d. The second language, run immediately after the primary on
+        /// this same serial queue. Never concurrently: two recognisers at once
+        /// on a phone that is also recording is exactly what the queue exists
+        /// to prevent.
+        var secondaryLocaleIdentifier: String?
 
         var key: String { "\(sessionID)#\(index)" }
     }
@@ -128,11 +142,12 @@ actor TranscriptionService {
                     if measured > 0 { await measure(job, seconds: measured) }
                 }
                 try await SegmentFinalisation.verify(url: job.fileURL)
-                var text = try await SegmentTranscriber.shared.transcribe(
+                var primary = try await SegmentTranscriber.shared.outcome(
                     fileURL: job.fileURL,
                     expectedDuration: job.expectedDuration,
                     localeIdentifier: job.localeIdentifier
                 )
+                var text = primary.text
                 var localeUsed = job.localeIdentifier
 
                 // An empty result is not proof of silence. A language whose
@@ -143,18 +158,53 @@ actor TranscriptionService {
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                    let alternate = job.alternateLocaleIdentifier,
                    alternate != job.localeIdentifier {
-                    if let second = try? await SegmentTranscriber.shared.transcribe(
+                    if let second = try? await SegmentTranscriber.shared.outcome(
                         fileURL: job.fileURL,
                         expectedDuration: job.expectedDuration,
                         localeIdentifier: alternate
-                    ), !second.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        text = second
+                    ), !second.isEmpty {
+                        primary = second
+                        text = second.text
                         localeUsed = alternate
                     }
                 }
                 // Persisted immediately, keyed by segment. Never held only in
                 // memory, so a jetsam between segments cannot lose work.
-                await deliver(job, text: text, locale: localeUsed)
+                // Phase 19d. The secondary pass runs after the primary, on the
+                // same queue. It can fail freely: a recording degrades to a
+                // single transcript rather than failing.
+                var secondary: TranscriptionOutcome?
+                var secondaryFailed = false
+                // Deliberately NOT gated on the primary having heard something.
+                // A stretch of pure Hindi is exactly where the English model
+                // returns nothing, and exactly where the second pass earns its
+                // keep. Skipping it there would disable the feature in the one
+                // case it exists for.
+                if let secondaryLocale = job.secondaryLocaleIdentifier,
+                   secondaryLocale != localeUsed {
+                    // The guard is checked again here, between the passes. It
+                    // is per job otherwise, and the second pass doubles the
+                    // compute on a phone that may still be recording. A hot
+                    // device gets the single transcript, which is a degradation
+                    // the design already allows.
+                    if thermalStateBlocksWork() {
+                        secondaryFailed = true
+                    } else {
+                        secondary = try? await SegmentTranscriber.shared.outcome(
+                            fileURL: job.fileURL,
+                            expectedDuration: job.expectedDuration,
+                            localeIdentifier: secondaryLocale
+                        )
+                        secondaryFailed = secondary == nil
+                    }
+                }
+
+                // Word timings are only ever used by the merge, and they are
+                // bulky: a thirty minute segment carries thousands of them.
+                // Kept only when there is a second reading to align against.
+                if secondary == nil { primary.words = [] }
+                await deliver(job, primary: primary, secondary: secondary,
+                              locale: localeUsed, failed: secondaryFailed)
                 // Phase 18a. Recognition succeeding and hearing nothing is a
                 // third outcome, not a failure. Conflating them is what put
                 // "could not be transcribed" under recordings where nobody
@@ -229,11 +279,16 @@ actor TranscriptionService {
         Task { @MainActor in onState(sessionID, index, state) }
     }
 
-    private func deliver(_ job: Job, text: String, locale: String) async {
+    private func deliver(_ job: Job,
+                         primary: TranscriptionOutcome,
+                         secondary: TranscriptionOutcome?,
+                         locale: String,
+                         failed: Bool) async {
         guard let onText else { return }
         let sessionID = job.sessionID
         let index = job.index
-        await MainActor.run { onText(sessionID, index, text, locale) }
+        let reading = SegmentReading(primary: primary, secondary: secondary, localeUsed: locale)
+        await MainActor.run { onText(sessionID, index, reading) }
     }
 
     private func measure(_ job: Job, seconds: TimeInterval) async {

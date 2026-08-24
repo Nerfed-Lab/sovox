@@ -224,6 +224,51 @@ else
   note "E75 on device recognition" "FAIL"; fail=1
 fi
 
+echo "== E74 to E95 phase 19 =="
+# E81. Silence gaps and clamps, not a fixed clock window.
+grep -q "silenceGap: TimeInterval = 0.4" Sovox/Transcription/TranscriptMerge.swift \
+  && grep -q "minimumWindow: TimeInterval = 3" Sovox/Transcription/TranscriptMerge.swift \
+  && grep -q "maximumWindow: TimeInterval = 20" Sovox/Transcription/TranscriptMerge.swift \
+  && note "E81 pause aligned windows, clamped" "PASS" || { note "E81 windows" "FAIL"; fail=1; }
+
+# E82. Nothing in the merge may score, classify or detect a language.
+if grep -nE "score|confidence|classif|spellCheck|dominantLanguage|NLLanguage" Sovox/Transcription/TranscriptMerge.swift | grep -vE "^\s*[0-9]+: *(//|///)" | grep -q .; then
+  note "E82 no heuristics in the merge" "FAIL"; fail=1
+else
+  note "E82 no heuristics in the merge" "PASS"
+fi
+must_be_absent "E82 no language detection anywhere"  "NLLanguageRecognizer|dominantLanguage"
+
+# E86 and E88. The threshold, and stage two without the preamble.
+grep -q "threshold = 80_000" Sovox/Handoff/StagedGeneration.swift \
+  && note "E86 two stage above 80,000" "PASS" || { note "E86 threshold" "FAIL"; fail=1; }
+if awk '/Stage 2/,/purpose: .notes/' Sovox/Handoff/HandoffCoordinator.swift | grep -q "merged: false"; then
+  note "E88 stage two omits the preamble" "PASS"
+else
+  note "E88 stage two preamble" "FAIL"; fail=1
+fi
+
+# E83. Devanagari belongs in the prompt only. The merged form must not be what
+# History, the clipboard or the email read.
+if grep -rn "mergedTranscript" Sovox/UI/ | grep -v MergePreviewView | grep -q .; then
+  note "E83 merged text stays out of the UI" "FAIL"; fail=1
+  grep -rn "mergedTranscript" Sovox/UI/ | grep -v MergePreviewView | head -3 | sed 's/^/    /'
+else
+  note "E83 merged text stays out of the UI" "PASS"
+fi
+if grep -n "mergedTranscript\|secondaryText" Sovox/Handoff/OutlookComposer.swift | grep -q .; then
+  note "E83 no second reading in the email" "FAIL"; fail=1
+else
+  note "E83 no second reading in the email" "PASS"
+fi
+
+# E80. The canonical readers must never touch the secondary.
+if grep -n "secondaryText\|mergedTranscript" Sovox/Handoff/AskPromptBuilder.swift Sovox/Model/TodoStore.swift | grep -q .; then
+  note "E80 primary canonical for Ask and to-dos" "FAIL"; fail=1
+else
+  note "E80 primary canonical for Ask and to-dos" "PASS"
+fi
+
 echo "== E10 colour tokens =="
 stray=$(grep -rlE "0x[0-9A-Fa-f]{6}" --include='*.swift' Sovox/ SovoxShared/ SovoxWidget/ 2>/dev/null \
         | grep -v "Theme.swift\|WidgetPalette.swift" | wc -l | tr -d ' ')

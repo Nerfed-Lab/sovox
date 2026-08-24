@@ -109,3 +109,25 @@ Fixes recordings coming back as No speech detected.
 - Settings, Transcription, Language. Check which section your language sits in
 - Settings, Self Test, Run smoke test, and speak for the full minute
 - Record thirty seconds of speech and confirm a transcript appears
+
+# 1.19, build 10
+
+Phase 19, dual language transcription. The project is now complete against every
+phase in the spec.
+
+- Settings, Transcription: primary language, Also transcribe in, secondary
+  language. Off gives exactly the behaviour and the prompt you had before
+- The same audio is transcribed twice and both readings are handed to the model,
+  interleaved by pause, for it to reconcile
+- A language that needs a network can never be selected
+- Recordings over 80,000 merged characters resolve segment by segment, then
+  synthesise once over the whole conversation
+- Settings, Developer, Merge preview shows the windows and the real sizes
+
+# What to Test, paste into App Store Connect for build 10
+
+- Settings, Transcription. Turn on Also transcribe in and check which section
+  Hindi sits in
+- Record two minutes switching between English and Hindi, then Generate
+- Settings, Developer, Merge preview to see the windows and both readings
+- With the toggle off, everything should behave exactly as it did in build 9

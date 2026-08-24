@@ -65,6 +65,7 @@ struct OutputSelectionView: View {
 
                 statusLine
                 busyLine
+                stagedLine
 
                 GlassProminentButton(title: "Generate",
                                      systemImage: "sparkles",
@@ -97,6 +98,7 @@ struct OutputSelectionView: View {
         }
         .background(SovoxBackdrop(active: false))
         .onAppear {
+            handoff.restoreStagedPlan()
             guard !loaded else { return }
             loaded = true
             modes = settings.defaultOutputs
@@ -141,6 +143,42 @@ struct OutputSelectionView: View {
             EmptyView()
         case .failed(let message):
             label(message, "exclamationmark.triangle.fill", SovoxPalette.paused)
+        }
+    }
+
+    /// Phase 19h. Several trips out to Shortcuts and back, so the screen says
+    /// which one is happening. An anonymous spinner across three round trips
+    /// reads as a hang.
+    @ViewBuilder
+    private var stagedLine: some View {
+        if let plan = handoff.stagedPlan {
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: plan.progress)
+                    .tint(SovoxPalette.accent)
+                Text(plan.progressLabel)
+                    .font(.footnote.weight(.medium))
+                if let failure = handoff.stagedFailure {
+                    Text(failure)
+                        .font(.caption)
+                        .foregroundStyle(SovoxPalette.paused)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Retry that segment") {
+                        handoff.retryStagedSegment(settings: settings, store: store)
+                    }
+                    .font(.footnote.weight(.semibold))
+                } else if !handoff.isInFlight {
+                    Button("Continue") {
+                        handoff.advanceStagedPlan(settings: settings, store: store)
+                    }
+                    .font(.footnote.weight(.semibold))
+                }
+                Button("Cancel") { handoff.cancelStagedPlan() }
+                    .font(.caption)
+                    .foregroundStyle(SovoxPalette.dim)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .glassCard(cornerRadius: 16)
         }
     }
 

@@ -64,6 +64,32 @@ struct SegmentRecord: Codable, Equatable, Sendable, Identifiable {
     /// Which language actually produced this, which is not always the one that
     /// was asked for. Optional so manifests written before this decode.
     var localeUsed: String?
+    /// Phase 19. The secondary language reading of the same audio, and the word
+    /// timings the merge aligns on. Only ever an input to generation: the
+    /// primary text above stays canonical everywhere else.
+    var secondaryText: String?
+    var primaryWords: [TimedWord]?
+    var secondaryWords: [TimedWord]?
+    /// The second pass was asked for and did not come back. Recorded rather
+    /// than swallowed, so a degraded recording can say so instead of quietly
+    /// looking like a single language one.
+    var secondaryFailed: Bool?
+
+    var hasSecondaryReading: Bool {
+        !(secondaryText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The two readings interleaved by pause, for this segment alone.
+    ///
+    /// A segment whose secondary pass failed still contributes its primary
+    /// reading, with an empty HI line. Returning nothing here dropped that
+    /// segment out of the merged transcript entirely, so a single failed second
+    /// pass silently deleted half an hour of the meeting from the prompt while
+    /// the notes came back looking complete.
+    var mergedWindows: [TranscriptMerge.Window] {
+        guard let primary = primaryWords, !primary.isEmpty else { return [] }
+        return TranscriptMerge.windows(primary: primary, secondary: secondaryWords ?? [])
+    }
 
     var id: Int { index }
 }
@@ -233,7 +259,12 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
 
     /// Every segment finished and none of them heard anything.
     var isSilent: Bool {
-        !segments.isEmpty && segments.allSatisfy { $0.state.isEmptyResult }
+        // A segment the English model heard nothing in, but the Hindi model
+        // did, is not silence. Sweeping it would delete a real conversation
+        // that happened to be entirely in the secondary language.
+        !segments.isEmpty
+            && segments.allSatisfy { $0.state.isEmptyResult }
+            && !segments.contains { $0.hasSecondaryReading }
     }
 
     /// Phase 18b and 18c.
@@ -268,6 +299,34 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
         if hasFailedSegment { return "Transcription failed, tap to retry" }
         if isSilent { return "No speech detected" }
         return nil
+    }
+
+    // MARK: Phase 19, the merged reading
+
+    /// Every segment's windows, offset so timestamps run across the whole
+    /// recording rather than restarting each segment.
+    var mergedTranscript: String {
+        var offset: TimeInterval = 0
+        var blocks: [String] = []
+        for segment in segments.sorted(by: { $0.index < $1.index }) {
+            let windows = segment.mergedWindows
+            if !windows.isEmpty {
+                blocks.append(TranscriptMerge.render(windows, offset: offset))
+            }
+            offset += segment.duration
+        }
+        return blocks.joined(separator: "\n")
+    }
+
+    /// True when at least one segment has both readings. A recording where the
+    /// secondary pass produced nothing falls back to the single transcript
+    /// prompt, unchanged.
+    var hasMergedReading: Bool {
+        segments.contains { $0.hasSecondaryReading && !($0.primaryWords ?? []).isEmpty }
+    }
+
+    var mergedWindowCount: Int {
+        segments.reduce(0) { $0 + $1.mergedWindows.count }
     }
 
     /// True when the transcript holds something somebody actually said, rather

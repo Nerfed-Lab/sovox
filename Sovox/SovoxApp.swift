@@ -11,7 +11,9 @@ enum AppTab: Hashable {
     /// started is the flow they should come back to.
     static func forResult(of purpose: BridgePurpose) -> AppTab {
         switch purpose {
-        case .notes: return .record
+        // A resolution pass belongs to a notes generation, so it comes back to
+        // the same screen.
+        case .notes, .resolve: return .record
         case .ask: return .ask
         case .todos: return .todos
         case .verify, .safety: return .settings

@@ -120,6 +120,16 @@ actor SegmentTranscriber {
     func transcribe(fileURL: URL,
                     expectedDuration: TimeInterval,
                     localeIdentifier: String = TranscriptionLocale.defaultIdentifier) async throws -> String {
+        try await outcome(fileURL: fileURL,
+                          expectedDuration: expectedDuration,
+                          localeIdentifier: localeIdentifier).text
+    }
+
+    /// The same recognition, with word timings kept. Phase 19f needs them to
+    /// find the pauses that both language passes agree on.
+    func outcome(fileURL: URL,
+                 expectedDuration: TimeInterval,
+                 localeIdentifier: String = TranscriptionLocale.defaultIdentifier) async throws -> TranscriptionOutcome {
         // Authorisation is re-checked at every use, never assumed from launch.
         guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
             throw TranscriptionError.notAuthorised
@@ -135,17 +145,20 @@ actor SegmentTranscriber {
         }
 
         #if SOVOX_SPEECHANALYZER
-        return try await SpeechAnalyzerTranscriber.transcribe(fileURL: fileURL, locale: Locale(identifier: TranscriptionLocale.normalise(localeIdentifier)))
+        let text = try await SpeechAnalyzerTranscriber.transcribe(fileURL: fileURL, locale: Locale(identifier: TranscriptionLocale.normalise(localeIdentifier)))
+        return TranscriptionOutcome(text: text, words: [], localeIdentifier: TranscriptionLocale.normalise(localeIdentifier))
         #else
         return try await recognise(fileURL: fileURL,
                                    recognizer: recognizer,
+                                   localeIdentifier: TranscriptionLocale.normalise(localeIdentifier),
                                    timeout: max(180, expectedDuration * 2))
         #endif
     }
 
     private func recognise(fileURL: URL,
                            recognizer: SFSpeechRecognizer,
-                           timeout: TimeInterval) async throws -> String {
+                           localeIdentifier: String,
+                           timeout: TimeInterval) async throws -> TranscriptionOutcome {
         let request = SFSpeechURLRecognitionRequest(url: fileURL)
         request.shouldReportPartialResults = false
         // Everything stays on the device. This is also the only mode that works
@@ -162,7 +175,7 @@ actor SegmentTranscriber {
 
         let guardBox = ResumeGuard()
 
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<TranscriptionOutcome, Error>) in
             let handle = TaskHandle()
             let task = recognizer.recognitionTask(with: request) { result, error in
                 if let error {
@@ -170,7 +183,15 @@ actor SegmentTranscriber {
                     return
                 }
                 guard let result, result.isFinal else { return }
-                if guardBox.claim() { continuation.resume(returning: result.bestTranscription.formattedString) }
+                if guardBox.claim() {
+                    let best = result.bestTranscription
+                    let words = best.segments.map {
+                        TimedWord(text: $0.substring, start: $0.timestamp, duration: $0.duration)
+                    }
+                    continuation.resume(returning: TranscriptionOutcome(text: best.formattedString,
+                                                                       words: words,
+                                                                       localeIdentifier: localeIdentifier))
+                }
             }
 
             handle.store(task)
