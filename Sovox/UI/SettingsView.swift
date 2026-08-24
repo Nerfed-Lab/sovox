@@ -95,10 +95,32 @@ struct SettingsView: View {
                     }
 
                     Section("Transcription") {
-                        Picker("Language", selection: $settings.transcriptionLocale) {
-                            ForEach(TranscriptionLocale.supported(), id: \.identifier) { locale in
-                                Text(TranscriptionLocale.displayName(locale))
-                                    .tag(TranscriptionLocale.normalise(locale.identifier))
+                        NavigationLink {
+                            TranscriptionLanguageView()
+                        } label: {
+                            HStack {
+                                Text("Language")
+                                Spacer()
+                                Text(TranscriptionLocale.displayName(Locale(identifier: settings.transcriptionLocale)))
+                                    .foregroundStyle(SovoxPalette.dim)
+                            }
+                        }
+                        // The one that bit: a language selected before this
+                        // check existed, or installed and then found to be
+                        // online only, still has to be recoverable in one tap.
+                        if TranscriptionLocale.availability(settings.transcriptionLocale) == .notUsable {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("This language needs an internet connection",
+                                      systemImage: "exclamationmark.triangle.fill")
+                                    .font(.footnote)
+                                    .foregroundStyle(SovoxPalette.paused)
+                                Text("Sovox only transcribes on the device, so recordings in this language come back with no text at all.")
+                                    .font(.caption)
+                                    .foregroundStyle(SovoxPalette.dim)
+                                Button("Switch to \(TranscriptionLocale.displayName(Locale(identifier: TranscriptionLocale.usable(nil))))") {
+                                    settings.transcriptionLocale = TranscriptionLocale.usable(nil)
+                                }
+                                .font(.footnote.weight(.semibold))
                             }
                         }
                         if !TranscriptionLocale.isOnDeviceReady(settings.transcriptionLocale) {

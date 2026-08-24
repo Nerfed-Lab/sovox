@@ -61,6 +61,9 @@ struct SegmentRecord: Codable, Equatable, Sendable, Identifiable {
     var duration: TimeInterval
     var state: SegmentState
     var text: String
+    /// Which language actually produced this, which is not always the one that
+    /// was asked for. Optional so manifests written before this decode.
+    var localeUsed: String?
 
     var id: Int { index }
 }

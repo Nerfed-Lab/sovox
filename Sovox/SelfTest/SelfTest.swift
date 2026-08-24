@@ -286,11 +286,19 @@ final class SelfTest {
         smokeProgress = 0
         smokeSummary = "Recording sixty seconds"
 
+        // Whatever a real recording would use. Testing a locale the app never
+        // reaches for proves nothing about the app.
+        let smokeLocale = TranscriptionLocale.usable(AppSettings.shared.transcriptionLocale)
         let sessionID = "smoketest-" + RecordingPaths.uniqueSessionID(for: Date())
         let collector = SmokeCollector()
         engine.onEvent = { event in
-            if case .segmentClosed(let index, let fileName, _) = event {
+            switch event {
+            case .segmentClosed(let index, let fileName, _):
                 collector.add(index: index, fileName: fileName)
+            case .level(let value):
+                collector.note(level: value)
+            default:
+                break
             }
         }
 
@@ -323,7 +331,9 @@ final class SelfTest {
             let url = directory.appendingPathComponent(entry.fileName)
             audioSeconds += Self.duration(of: url)
             do {
-                let text = try await SegmentTranscriber.shared.transcribe(fileURL: url, expectedDuration: 30)
+                let text = try await SegmentTranscriber.shared.transcribe(fileURL: url,
+                                                                          expectedDuration: 30,
+                                                                          localeIdentifier: smokeLocale)
                 transcripts.append(SegmentTranscript(index: entry.index, text: text))
             } catch {
                 failures.append("seg \(entry.index): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
@@ -336,12 +346,22 @@ final class SelfTest {
         let gapVerdict = abs(gap) <= 1.0 ? "no gap" : String(format: "%.2fs shortfall", gap)
         let segmentVerdict = files.count >= 2 ? "PASS" : "FAIL"
 
+        let peak = collector.peakLevel()
         var lines = [
             "\(segmentVerdict), \(files.count) segments rolled",
             String(format: "wall clock %.1fs, audio %.1fs, %@", wallClock, audioSeconds, gapVerdict),
+            String(format: "peak input level %.2f", peak),
+            "transcribed with \(smokeLocale)",
             "transcript \(stitched.count) characters"
         ]
         if !failures.isEmpty { lines.append("transcription issues: " + failures.joined(separator: "; ")) }
+        // The whole point of the two lines above: say which of the two very
+        // different problems this is.
+        if stitched.isEmpty {
+            lines.append(peak < 0.02
+                         ? "The microphone heard nothing. Check the mic is not covered or in use by another app."
+                         : "Audio was captured but \(smokeLocale) transcribed none of it. Try another language in Settings, Transcription.")
+        }
         smokeSummary = lines.joined(separator: "\n")
 
         try? FileManager.default.removeItem(at: directory)
@@ -362,6 +382,20 @@ final class SelfTest {
 final class SmokeCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var entries: [(index: Int, fileName: String)] = []
+    private var peak: Float = 0
+
+    /// Loudest input seen while recording. Zero characters of transcript means
+    /// two completely different things depending on this number, and without it
+    /// the smoke test cannot tell the user which.
+    func note(level: Float) {
+        lock.lock(); defer { lock.unlock() }
+        peak = max(peak, level)
+    }
+
+    func peakLevel() -> Float {
+        lock.lock(); defer { lock.unlock() }
+        return peak
+    }
 
     func add(index: Int, fileName: String) {
         lock.lock()

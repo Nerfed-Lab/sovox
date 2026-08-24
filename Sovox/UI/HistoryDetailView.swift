@@ -43,7 +43,7 @@ struct HistoryDetailView: View {
                 HStack {
                     Text("Segment \(segment.index)").font(.subheadline.weight(.medium))
                     Spacer()
-                    Text(segment.state.label)
+                    Text(segmentLabel(segment))
                         .font(.caption)
                         .foregroundStyle(tint(for: segment.state))
                 }
@@ -78,6 +78,15 @@ struct HistoryDetailView: View {
             return "One or more segments failed. The audio is still the only copy of those minutes, so retry them first."
         }
         return "Available once transcription finishes. The audio is still the only copy of the untranscribed part."
+    }
+
+    /// An empty result that does not say which language produced it leaves the
+    /// user with nothing to act on.
+    private func segmentLabel(_ segment: SegmentRecord) -> String {
+        guard segment.state.isEmptyResult, let locale = segment.localeUsed else {
+            return segment.state.label
+        }
+        return "No speech, \(locale)"
     }
 
     private func icon(for state: SegmentState) -> String {

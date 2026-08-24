@@ -5,7 +5,7 @@ import Foundation
 /// send it back across the boundary under Swift 6 strict concurrency, and the
 /// closures keep the service testable without knowing who consumes it.
 typealias TranscriptionStateHandler = @Sendable @MainActor (String, Int, SegmentState) -> Void
-typealias TranscriptionTextHandler = @Sendable @MainActor (String, Int, String) -> Void
+typealias TranscriptionTextHandler = @Sendable @MainActor (String, Int, String, String) -> Void
 typealias TranscriptionDrainHandler = @Sendable @MainActor (String) -> Void
 /// Duration read off the file itself, for segments the app adopted from disk
 /// after a force quit and therefore never timed.
@@ -31,6 +31,8 @@ actor TranscriptionService {
         let fileURL: URL
         let expectedDuration: TimeInterval
         var localeIdentifier: String = TranscriptionLocale.defaultIdentifier
+        /// Tried once, and only when the first pass hears nothing at all.
+        var alternateLocaleIdentifier: String?
 
         var key: String { "\(sessionID)#\(index)" }
     }
@@ -126,14 +128,33 @@ actor TranscriptionService {
                     if measured > 0 { await measure(job, seconds: measured) }
                 }
                 try await SegmentFinalisation.verify(url: job.fileURL)
-                let text = try await SegmentTranscriber.shared.transcribe(
+                var text = try await SegmentTranscriber.shared.transcribe(
                     fileURL: job.fileURL,
                     expectedDuration: job.expectedDuration,
                     localeIdentifier: job.localeIdentifier
                 )
+                var localeUsed = job.localeIdentifier
+
+                // An empty result is not proof of silence. A language whose
+                // offline model is not really installed returns exactly this,
+                // on every segment, for ever. One retry on a language known to
+                // work tells the two apart, and costs nothing when the audio
+                // really was silent.
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let alternate = job.alternateLocaleIdentifier,
+                   alternate != job.localeIdentifier {
+                    if let second = try? await SegmentTranscriber.shared.transcribe(
+                        fileURL: job.fileURL,
+                        expectedDuration: job.expectedDuration,
+                        localeIdentifier: alternate
+                    ), !second.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        text = second
+                        localeUsed = alternate
+                    }
+                }
                 // Persisted immediately, keyed by segment. Never held only in
                 // memory, so a jetsam between segments cannot lose work.
-                await deliver(job, text: text)
+                await deliver(job, text: text, locale: localeUsed)
                 // Phase 18a. Recognition succeeding and hearing nothing is a
                 // third outcome, not a failure. Conflating them is what put
                 // "could not be transcribed" under recordings where nobody
@@ -208,11 +229,11 @@ actor TranscriptionService {
         Task { @MainActor in onState(sessionID, index, state) }
     }
 
-    private func deliver(_ job: Job, text: String) async {
+    private func deliver(_ job: Job, text: String, locale: String) async {
         guard let onText else { return }
         let sessionID = job.sessionID
         let index = job.index
-        await MainActor.run { onText(sessionID, index, text) }
+        await MainActor.run { onText(sessionID, index, text, locale) }
     }
 
     private func measure(_ job: Job, seconds: TimeInterval) async {

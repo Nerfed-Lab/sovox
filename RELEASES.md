@@ -92,3 +92,20 @@ Worth exercising:
   vanish with a brief note rather than leaving a row
 - Record a minute of silence. It should stay, labelled No speech detected
 - Settings, Diagnostics, Speech capability, then send me the report
+
+# 1.19, build 9
+
+Fixes recordings coming back as No speech detected.
+
+- Languages that need a network are shown as Not usable and cannot be selected
+- A segment that transcribes to nothing is retried once on a language known to
+  work on this device
+- The empty label names the language that produced it
+- The smoke test uses the language a real recording would use, reports the peak
+  input level, and tells you whether the microphone or the recogniser is at fault
+
+# What to Test, paste into App Store Connect for build 9
+
+- Settings, Transcription, Language. Check which section your language sits in
+- Settings, Self Test, Run smoke test, and speak for the full minute
+- Record thirty seconds of speech and confirm a transcript appears

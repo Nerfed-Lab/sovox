@@ -121,3 +121,42 @@ final class LocaleFallbackTests: XCTestCase {
                        TranscriptionLocale.defaultIdentifier)
     }
 }
+
+/// Every recording came back "No speech detected". A language whose offline
+/// model is not really installed returns an empty result rather than an error,
+/// on every segment, for ever.
+final class LocaleAvailabilityTests: XCTestCase {
+
+    func testAnAlternateIsOfferedWhenTheChosenLanguageProducesNothing() {
+        // hi_IN chosen, only English installed: the retry has somewhere to go.
+        let alternate = TranscriptionLocale.alternate(to: "hi_IN") { $0.hasPrefix("en") }
+        XCTAssertNotNil(alternate)
+        XCTAssertTrue(alternate?.hasPrefix("en") ?? false)
+        XCTAssertNotEqual(alternate, "hi_IN")
+    }
+
+    func testTheAlternateIsNeverTheLanguageThatAlreadyFailed() {
+        XCTAssertNotEqual(TranscriptionLocale.alternate(to: "en_US") { _ in true }, "en_US")
+        XCTAssertNotEqual(TranscriptionLocale.alternate(to: "en_IN") { _ in true }, "en_IN")
+    }
+
+    func testNoAlternateWhenNothingElseIsInstalled() {
+        XCTAssertNil(TranscriptionLocale.alternate(to: "hi_IN") { _ in false })
+    }
+
+    func testHyphensDoNotProduceADuplicateAlternate() {
+        XCTAssertNotEqual(TranscriptionLocale.alternate(to: "en-US") { _ in true }, "en_US")
+    }
+
+    func testAvailabilityIsThreeStatesAndOnlyReadyIsSelectable() {
+        XCTAssertTrue(TranscriptionLocale.Availability.ready.isSelectable)
+        XCTAssertTrue(TranscriptionLocale.Availability.needsInstall.isSelectable)
+        XCTAssertFalse(TranscriptionLocale.Availability.notUsable.isSelectable,
+                       "offering an online only language is offering silence")
+    }
+
+    func testTheDeviceDefaultResolvesToSomethingReal() {
+        // en_US is installed on every device that has dictation at all.
+        XCTAssertEqual(TranscriptionLocale.availability("en_US"), .ready)
+    }
+}

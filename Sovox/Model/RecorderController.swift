@@ -74,8 +74,8 @@ final class RecorderController: SovoxCommandHandler {
                 onState: { [weak self] sessionID, index, state in
                     self?.transcriptionStateChanged(sessionID: sessionID, index: index, state: state)
                 },
-                onText: { [weak self] sessionID, index, text in
-                    self?.transcriptionProduced(sessionID: sessionID, index: index, text: text)
+                onText: { [weak self] sessionID, index, text, locale in
+                    self?.transcriptionProduced(sessionID: sessionID, index: index, text: text, locale: locale)
                 },
                 onDrained: { [weak self] sessionID in
                     self?.transcriptionQueueDrained(sessionID: sessionID)
@@ -399,7 +399,8 @@ final class RecorderController: SovoxCommandHandler {
                                            index: index,
                                            fileURL: session.directory.appendingPathComponent(record.fileName),
                                            expectedDuration: duration,
-                                           localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier))
+                                           localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier),
+                                           alternateLocaleIdentifier: TranscriptionLocale.alternate(to: TranscriptionLocale.usable(session.localeIdentifier)))
         Task { await TranscriptionService.shared.enqueue(job) }
     }
 
@@ -413,7 +414,8 @@ final class RecorderController: SovoxCommandHandler {
                                      index: record.index,
                                      fileURL: session.directory.appendingPathComponent(record.fileName),
                                      expectedDuration: record.duration,
-                                     localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier))
+                                     localeIdentifier: TranscriptionLocale.usable(session.localeIdentifier),
+                                     alternateLocaleIdentifier: TranscriptionLocale.alternate(to: TranscriptionLocale.usable(session.localeIdentifier)))
         }
         guard !jobs.isEmpty else { return false }
         Task { await TranscriptionService.shared.enqueue(jobs) }
@@ -543,10 +545,11 @@ extension RecorderController {
         }
     }
 
-    func transcriptionProduced(sessionID: String, index: Int, text: String) {
+    func transcriptionProduced(sessionID: String, index: Int, text: String, locale: String) {
         guard var session = store.session(id: sessionID),
               let slot = session.segments.firstIndex(where: { $0.index == index }) else { return }
         session.segments[slot].text = text
+        session.segments[slot].localeUsed = locale
         session.transcript = session.stitchedTranscript
         store.upsert(session)
         if currentSession?.id == sessionID { currentSession = session }

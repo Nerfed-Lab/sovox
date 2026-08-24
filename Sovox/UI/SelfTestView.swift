@@ -76,7 +76,7 @@ struct SelfTestView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("60 second smoke test")
                 .font(.headline)
-            Text("Records for a minute with a twenty second segment interval, rolls the segments, transcribes them, stitches and checks for a gap at each boundary.")
+            Text("Speak normally for the whole minute. It records with a twenty second segment interval, rolls the segments, transcribes them, stitches and checks for a gap at each boundary. Staying silent makes the transcript empty, which tells you nothing.")
                 .font(.footnote)
                 .foregroundStyle(SovoxPalette.dim)
 

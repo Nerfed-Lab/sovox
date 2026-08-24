@@ -491,7 +491,33 @@ mattered and the one the original tests skipped.
 could never have its audio deleted. `.empty` counts as finished now, because
 transcription ran and there was nothing to hear.
 
-# Deviations from the spec, stated rather than buried
+# Every recording reading as No speech detected
+
+The smoke test settled the first question: 62.1 seconds of audio in the files,
+four segments rolled, zero characters of transcript. Recording and file writing
+are fine. Recognition returned nothing.
+
+**The picker was offering languages that cannot work here.** Recognition is
+forced on device and this app never uses a network, so a language whose offline
+model is not really installed does not error, it returns an empty final result,
+on every segment, for ever. The language list now shows Ready, Needs install and
+Not usable, decided at runtime, and a not usable language cannot be selected. If
+one is already selected, Settings offers a one tap switch back.
+
+**An empty result is no longer the end of it.** A segment that comes back with
+nothing is retried once against a language known to work on this device. Silence
+still reads as silence, since the retry finds nothing either, but a broken
+language model now produces a transcript instead of a dead recording. The
+language that actually produced each segment is stored with it, so the empty
+label names it.
+
+**The smoke test was testing a path the app never takes.** It transcribed with a
+hardcoded en_IN rather than the locale a real recording uses, and it never told
+the user to speak, so an empty transcript was ambiguous between a silent minute
+and a broken recogniser. It now uses the resolved locale, names it, reports the
+peak input level, and says which of those two happened.
+
+
 
 **Phase 2 asks for SpeechAnalyzer / SpeechTranscriber. The shipping path is
 SFSpeechRecognizer with `requiresOnDeviceRecognition`.** The SpeechAnalyzer

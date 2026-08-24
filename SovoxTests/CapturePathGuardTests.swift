@@ -57,6 +57,11 @@ final class CapturePathGuardTests: XCTestCase {
         // Mirror describes the stored properties. A vocabulary or hints field
         // appearing here would be the regression E42 forbids.
         let fields = Mirror(reflecting: job).children.compactMap(\.label).sorted()
-        XCTAssertEqual(fields, ["expectedDuration", "fileURL", "index", "localeIdentifier", "sessionID"])
+        // alternateLocaleIdentifier is a locale, the same kind of value as
+        // localeIdentifier, added so an empty result can be retried on a
+        // language known to work. Still no term list, still nothing to inject.
+        XCTAssertEqual(fields, ["alternateLocaleIdentifier", "expectedDuration", "fileURL",
+                                "index", "localeIdentifier", "sessionID"])
+        XCTAssertFalse(fields.contains { $0.lowercased().contains("vocab") || $0.lowercased().contains("hint") })
     }
 }

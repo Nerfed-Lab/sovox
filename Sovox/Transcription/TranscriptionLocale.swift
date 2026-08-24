@@ -54,6 +54,41 @@ enum TranscriptionLocale {
         return chain
     }
 
+    /// The next locale worth trying when the chosen one produces nothing.
+    ///
+    /// supportsOnDeviceRecognition can report true for a language whose offline
+    /// model is not really there. The request then honours
+    /// requiresOnDeviceRecognition, hears nothing, and returns an empty final
+    /// result rather than an error, so every recording reads as silence. One
+    /// retry on a language known to work turns that from a dead end into a
+    /// transcript.
+    static func alternate(to identifier: String,
+                          isReady: (String) -> Bool = isOnDeviceReady) -> String? {
+        let asked = normalise(identifier)
+        return fallbackChain(for: asked).dropFirst().first { $0 != asked && isReady($0) }
+    }
+
+    /// Three states, per locale, decided at runtime.
+    enum Availability: Equatable, Sendable {
+        case ready
+        case needsInstall
+        /// Recognition for this locale wants a network, and this app never uses
+        /// one. Offered as a choice it would silently produce nothing.
+        case notUsable
+
+        var isSelectable: Bool { self != .notUsable }
+    }
+
+    static func availability(_ identifier: String) -> Availability {
+        let wanted = normalise(identifier)
+        guard let recogniser = SFSpeechRecognizer(locale: Locale(identifier: wanted)) else {
+            return .notUsable
+        }
+        if recogniser.supportsOnDeviceRecognition { return .ready }
+        // Present and reachable, but only over the network.
+        return recogniser.isAvailable ? .notUsable : .needsInstall
+    }
+
     /// The locale a job should actually run in.
     ///
     /// A supported language is not the same as an installed one. Without this
