@@ -131,3 +131,13 @@ phase in the spec.
 - Record two minutes switching between English and Hindi, then Generate
 - Settings, Developer, Merge preview to see the windows and both readings
 - With the toggle off, everything should behave exactly as it did in build 9
+
+# 1.19, build 12
+
+Phase 19 complete, plus the Action Button change.
+
+- The Action Button starts recording without opening the app. Only the Dynamic
+  Island appears
+- A start that fails, or a consent reminder that needs you, arrives as a
+  notification instead of an alert nobody is looking at
+- Every segment reaches the prompt even when its second language pass failed

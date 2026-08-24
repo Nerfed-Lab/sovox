@@ -1,4 +1,5 @@
 import XCTest
+import AppIntents
 @testable import Sovox
 
 /// Phase 15. A real setup attempt on device produced four defects, every one of
@@ -228,5 +229,30 @@ final class VerifyStrictnessTests: XCTestCase {
         XCTAssertTrue(handoff.hasPersistedRequest,
                       "the fallback has to key off this, not off in memory phase")
         XCTAssertFalse(handoff.isInFlight, "phase is idle in a fresh process, which is the whole point")
+    }
+}
+
+/// The Action Button opened the app every time it started a recording. iOS 18
+/// added AudioRecordingIntent precisely so it does not have to.
+final class BackgroundStartIntentTests: XCTestCase {
+
+    func testStartingIntentsDoNotOpenTheApp() {
+        XCTAssertFalse(StartSovoxIntent.openAppWhenRun,
+                       "the Action Button should leave you where you were")
+        XCTAssertFalse(ToggleSovoxIntent.openAppWhenRun)
+    }
+
+    func testTransportIntentsStillDoNotOpenTheApp() {
+        // These never did, which is what makes the Lock Screen buttons usable
+        // without unlocking.
+        XCTAssertFalse(StopSovoxIntent.openAppWhenRun)
+        XCTAssertFalse(PauseSovoxIntent.openAppWhenRun)
+        XCTAssertFalse(ResumeSovoxIntent.openAppWhenRun)
+    }
+
+    func testTheStartingIntentsDeclareThemselvesAsRecording() {
+        // The declaration is what earns the background session activation.
+        XCTAssertTrue((StartSovoxIntent() as Any) is any AudioRecordingIntent)
+        XCTAssertTrue((ToggleSovoxIntent() as Any) is any AudioRecordingIntent)
     }
 }

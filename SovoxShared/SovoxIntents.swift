@@ -6,14 +6,18 @@ import AppIntents
 /// Conforming to LiveActivityIntent makes iOS perform them in the app process,
 /// which is the only process that owns the audio engine.
 
-struct StartSovoxIntent: LiveActivityIntent {
+struct StartSovoxIntent: LiveActivityIntent, AudioRecordingIntent {
     static let title: LocalizedStringResource = "Start Sovox"
     static let description = IntentDescription("Begins a new background recording.")
-    /// iOS refuses to activate a recording session for a process it launched
-    /// straight into the background, so anything that begins a recording brings
-    /// the app forward first. Stop, Pause and Resume do not, which is what lets
-    /// the Lock Screen buttons work without unlocking.
-    static let openAppWhenRun = true
+    /// AudioRecordingIntent is what lets a recording begin without the app
+    /// coming forward. Before iOS 18 the session simply refused to activate for
+    /// a process launched into the background, which is why this used to open
+    /// the app; the Action Button now starts the recording and leaves you where
+    /// you were, with the Dynamic Island as the only sign.
+    ///
+    /// If activation still fails, the failure is spoken back and a notification
+    /// is posted, because a recording that did not start must never be silent.
+    static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let result = await SovoxCommands.start()
@@ -58,10 +62,10 @@ struct ResumeSovoxIntent: LiveActivityIntent {
 /// Returns as soon as the transport state flips. Transcription is queued on a
 /// detached task and is never awaited here, so this cannot hit the intent
 /// execution budget.
-struct ToggleSovoxIntent: LiveActivityIntent {
+struct ToggleSovoxIntent: LiveActivityIntent, AudioRecordingIntent {
     static let title: LocalizedStringResource = "Toggle Sovox"
     static let description = IntentDescription("Starts a recording, or stops the one in progress.")
-    static let openAppWhenRun = true
+    static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let result = await SovoxCommands.toggle()

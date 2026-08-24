@@ -259,9 +259,18 @@ final class RecorderController: SovoxCommandHandler {
         // begins when the user confirms. Saying "started" here would be a lie.
         if settings.announceConsent {
             pendingConsentStart = true
+            // The app is no longer brought forward, so this has to reach the
+            // user some other way.
+            Notifier.post(title: "Sovox is waiting",
+                          body: "Tell everyone you are recording, then open Sovox and tap Start.")
             return .awaitingConsent
         }
-        return await start() ? .started : .startFailed
+        if await start() { return .started }
+        // Started from the Action Button, with the app still in the background:
+        // an alert nobody can see is the same as no alert at all.
+        Notifier.post(title: "Sovox could not start",
+                      body: alertMessage ?? "Open Sovox to see why.")
+        return .startFailed
     }
 
     func commandStop() async -> SovoxCommandResult {
