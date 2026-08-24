@@ -259,10 +259,9 @@ final class RecorderController: SovoxCommandHandler {
         // begins when the user confirms. Saying "started" here would be a lie.
         if settings.announceConsent {
             pendingConsentStart = true
-            // The app is no longer brought forward, so this has to reach the
-            // user some other way.
-            Notifier.post(title: "Sovox is waiting",
-                          body: "Tell everyone you are recording, then open Sovox and tap Start.")
+            // The intent opens the app for this case, so the reminder appears
+            // on screen. No notification: it would arrive as the app comes
+            // forward and say the same thing twice.
             return .awaitingConsent
         }
         if await start() { return .started }

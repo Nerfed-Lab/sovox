@@ -250,6 +250,40 @@ final class BackgroundStartIntentTests: XCTestCase {
         XCTAssertFalse(ResumeSovoxIntent.openAppWhenRun)
     }
 
+    func testAFailedBackgroundStartFallsBackToOpeningTheApp() {
+        // Build 12 shipped with the button doing nothing when the background
+        // start did not take. Anything that cannot be done from the background
+        // must hand over to the foreground rather than end there.
+        XCTAssertTrue(SovoxCommandResult.startFailed.needsForeground)
+        XCTAssertTrue(SovoxCommandResult.unavailable.needsForeground)
+        XCTAssertTrue(SovoxCommandResult.awaitingConsent.needsForeground)
+    }
+
+    func testARealAnswerLeavesTheAppClosed() {
+        for result in [SovoxCommandResult.started, .stopped, .paused,
+                       .resumed, .alreadyRunning, .notRunning] {
+            XCTAssertFalse(result.needsForeground, "\(result) is a real answer")
+        }
+    }
+
+    func testTheFallbackIntentOpensTheApp() {
+        XCTAssertTrue(OpenSovoxAndStartIntent.openAppWhenRun)
+        XCTAssertFalse(OpenSovoxAndStartIntent.isDiscoverable,
+                       "it exists for the fallback, not for the Shortcuts library")
+    }
+
+    func testEachIntentDeclaresExactlyOneSystemBehaviour() {
+        // Conforming to two SystemIntent protocols at once is the most likely
+        // reason the Action Button stopped working in build 12.
+        XCTAssertFalse((StartSovoxIntent() as Any) is any LiveActivityIntent)
+        XCTAssertFalse((ToggleSovoxIntent() as Any) is any LiveActivityIntent)
+        // The transport intents stay LiveActivityIntent: they back the buttons
+        // on the Lock Screen card.
+        XCTAssertTrue((StopSovoxIntent() as Any) is any LiveActivityIntent)
+        XCTAssertTrue((PauseSovoxIntent() as Any) is any LiveActivityIntent)
+        XCTAssertTrue((ResumeSovoxIntent() as Any) is any LiveActivityIntent)
+    }
+
     func testTheStartingIntentsDeclareThemselvesAsRecording() {
         // The declaration is what earns the background session activation.
         XCTAssertTrue((StartSovoxIntent() as Any) is any AudioRecordingIntent)

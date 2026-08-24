@@ -12,6 +12,15 @@ enum SovoxCommandResult: String, Sendable {
     case notRunning
     case awaitingConsent
 
+    /// The two outcomes that mean "this could not be done from the background".
+    /// Anything else is a real answer and the app stays closed.
+    var needsForeground: Bool {
+        switch self {
+        case .startFailed, .unavailable, .awaitingConsent: return true
+        case .started, .stopped, .paused, .resumed, .alreadyRunning, .notRunning: return false
+        }
+    }
+
     var spokenText: String {
         switch self {
         case .started: return "started"
