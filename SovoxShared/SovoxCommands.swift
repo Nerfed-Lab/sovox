@@ -60,7 +60,13 @@ enum SovoxCommands {
     /// Short bounded wait so an intent that arrives a few milliseconds before
     /// the app finishes launching still finds the handler. Capped well under
     /// the App Intents execution budget.
-    static func resolveHandler(timeoutSeconds: Double = 2.0) async -> SovoxCommandHandler? {
+    /// Four seconds, not two. With the app not running at all, iOS launches it
+    /// in the background to perform the intent, and a cold SwiftUI launch on a
+    /// busy phone can take longer than two seconds. Giving up early returns
+    /// unavailable, which is what an Action Button press that appears to do
+    /// nothing looks like from the inside. Still well inside the intent
+    /// execution budget.
+    static func resolveHandler(timeoutSeconds: Double = 4.0) async -> SovoxCommandHandler? {
         if let handler { return handler }
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {

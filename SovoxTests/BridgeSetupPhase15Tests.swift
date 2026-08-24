@@ -290,3 +290,34 @@ final class BackgroundStartIntentTests: XCTestCase {
         XCTAssertTrue((ToggleSovoxIntent() as Any) is any AudioRecordingIntent)
     }
 }
+
+/// Every route that can start a recording, checked together. Build 12 broke one
+/// of them by changing an intent the other three also use.
+final class StartRouteTests: XCTestCase {
+
+    func testEveryStartingRouteUsesAnIntentThatCanRecordInTheBackground() {
+        // Action Button and Siri go through the App Shortcut, Control Centre
+        // goes through the control, and both land on these two.
+        XCTAssertTrue((ToggleSovoxIntent() as Any) is any AudioRecordingIntent)
+        XCTAssertTrue((StartSovoxIntent() as Any) is any AudioRecordingIntent)
+    }
+
+    func testTheShortcutsProviderStillExposesTheStartingPhrases() {
+        // The Action Button binds to an App Shortcut. If Toggle stops being
+        // listed, the button has nothing to bind to.
+        let shortcuts = SovoxShortcuts.appShortcuts
+        XCTAssertGreaterThanOrEqual(shortcuts.count, 5)
+    }
+
+    @MainActor
+    func testTheHandlerWaitIsBoundedAndConfigurable() async {
+        // Two seconds was not enough for a cold background launch, and giving
+        // up early looked exactly like a dead button. The wait still has to
+        // end, well inside the intent execution budget.
+        let started = Date()
+        let resolved = await SovoxCommands.resolveHandler(timeoutSeconds: 0.2)
+        let elapsed = Date().timeIntervalSince(started)
+        XCTAssertLessThan(elapsed, 2.0, "the wait is bounded")
+        if resolved == nil { XCTAssertGreaterThanOrEqual(elapsed, 0.1, "and it did wait") }
+    }
+}
