@@ -328,3 +328,75 @@ final class MergeDegradationTests: XCTestCase {
         XCTAssertTrue(s.discardVerdict.discards)
     }
 }
+
+/// The audit found the merged prompt losing whole segments two different ways,
+/// the second of which was a memory optimisation defeating the fix for the
+/// first. Both cost the user a stretch of the meeting with nothing on screen
+/// to say so.
+final class MergedCompletenessTests: XCTestCase {
+
+    private func session(secondaryOn: [Int], timingsOn: [Int], count: Int = 4) -> RecordingSession {
+        var s = RecordingSession(id: "s", startDate: Date())
+        s.isComplete = true
+        s.duration = TimeInterval(count * 60)
+        s.segments = (1...count).map { index in
+            var record = SegmentRecord(index: index,
+                                       fileName: RecordingPaths.segmentFileName(index),
+                                       duration: 60,
+                                       state: .done,
+                                       text: "spoken words in segment \(index)")
+            if timingsOn.contains(index) {
+                record.primaryWords = [TimedWord(text: "spoken", start: 0, duration: 0.5),
+                                       TimedWord(text: "seg\(index)", start: 0.6, duration: 0.5)]
+            }
+            if secondaryOn.contains(index) {
+                record.secondaryText = "हिंदी \(index)"
+                record.secondaryWords = [TimedWord(text: "हिंदी", start: 0, duration: 0.5)]
+            }
+            return record
+        }
+        return s
+    }
+
+    func testEverySegmentReachesThePromptWhenOneSecondPassFailed() {
+        // Segments 1 and 2 have both readings. 3 and 4 lost the second pass and
+        // with it, before the fix, their timings.
+        let s = session(secondaryOn: [1, 2], timingsOn: [1, 2])
+        let merged = s.mergedTranscript
+        for index in 1...4 {
+            XCTAssertTrue(merged.contains("segment \(index)") || merged.contains("seg\(index)"),
+                          "segment \(index) is missing from the prompt entirely")
+        }
+    }
+
+    func testASegmentWithNoTimingsStillAppearsAsAnEnglishBlock() {
+        let s = session(secondaryOn: [1], timingsOn: [1])
+        let merged = s.mergedTranscript
+        XCTAssertTrue(merged.contains("EN: spoken words in segment 2"))
+        XCTAssertTrue(merged.contains("[01:00]"), "and at the right point in the recording")
+    }
+
+    func testStageOneCoversEverySegmentThatHoldsSpeech() {
+        let s = session(secondaryOn: [1, 2], timingsOn: [1, 2])
+        let plan = StagedGeneration.plan(for: s, modes: [.actionsAndDecisions],
+                                         customActions: [], conversationType: .auto,
+                                         destination: .claude)
+        XCTAssertEqual(plan.segmentIndices, [1, 2, 3, 4],
+                       "a segment left out here is left out of the synthesis too")
+    }
+
+    func testASingleReadingSegmentSkipsTheRoundTripButKeepsItsWords() {
+        let s = session(secondaryOn: [1], timingsOn: [1])
+        var plan = StagedGeneration.plan(for: s, modes: [], customActions: [],
+                                         conversationType: .auto, destination: .claude)
+        XCTAssertEqual(plan.nextSegment, 1, "only the two reading segment needs resolving")
+        plan.resolved[1] = "resolved one"
+        XCTAssertTrue(plan.isReadyForSynthesis)
+        let synthesis = plan.resolvedTranscript
+        XCTAssertTrue(synthesis.contains("resolved one"))
+        for index in 2...4 {
+            XCTAssertTrue(synthesis.contains("segment \(index)"),
+                          "segment \(index) must still reach stage two")
+        }
+    }
+}

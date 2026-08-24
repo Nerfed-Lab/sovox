@@ -61,15 +61,31 @@ struct StagedGeneration: Codable, Equatable, Sendable {
                      conversationType: ConversationType,
                      destination: AIDestination) -> StagedGeneration {
         StagedGeneration(sessionID: session.id,
+                         // Every segment that holds speech, not only the ones
+                         // with two readings. Filtering here dropped a segment
+                         // out of stage 2 as well as stage 1, so the synthesis
+                         // ran over a conversation with a hole in it.
                          segmentIndices: session.segments
-                            .filter { !$0.mergedWindows.isEmpty }
+                            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                             .map(\.index)
                             .sorted(),
-                         resolved: [:],
+                         resolved: preResolved(session),
                          modes: modes.map(\.rawValue),
                          customActionIDs: customActions.map { $0.id.uuidString },
                          conversationType: conversationType.rawValue,
                          destination: destination.rawValue)
+    }
+
+    /// A segment with only one reading has nothing to reconcile, so it skips
+    /// stage 1 entirely rather than costing a round trip to be handed back
+    /// unchanged.
+    private static func preResolved(_ session: RecordingSession) -> [Int: String] {
+        var resolved: [Int: String] = [:]
+        for segment in session.segments where segment.mergedWindows.isEmpty {
+            let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { resolved[segment.index] = text }
+        }
+        return resolved
     }
 
     /// Whether this recording needs splitting at all. Most do not.

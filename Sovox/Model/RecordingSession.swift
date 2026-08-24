@@ -312,6 +312,11 @@ struct RecordingSession: Codable, Equatable, Sendable, Identifiable {
             let windows = segment.mergedWindows
             if !windows.isEmpty {
                 blocks.append(TranscriptMerge.render(windows, offset: offset))
+            } else if !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // No timings, so no windows, but the words exist and must not
+                // be dropped. One block for the whole segment, EN only. The
+                // preamble already tells the model to prefer EN.
+                blocks.append("\(TranscriptMerge.timestamp(offset))\nEN: \(segment.text)")
             }
             offset += segment.duration
         }

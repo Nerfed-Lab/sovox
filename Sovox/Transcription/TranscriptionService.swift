@@ -199,10 +199,12 @@ actor TranscriptionService {
                     }
                 }
 
-                // Word timings are only ever used by the merge, and they are
-                // bulky: a thirty minute segment carries thousands of them.
-                // Kept only when there is a second reading to align against.
-                if secondary == nil { primary.words = [] }
+                // Word timings are bulky, so they are dropped when no second
+                // reading was ever asked for. NOT when one was asked for and
+                // failed: without words there are no windows, without windows
+                // the segment leaves the merged transcript entirely, and the
+                // notes come back looking complete with that stretch missing.
+                if job.secondaryLocaleIdentifier == nil { primary.words = [] }
                 await deliver(job, primary: primary, secondary: secondary,
                               locale: localeUsed, failed: secondaryFailed)
                 // Phase 18a. Recognition succeeding and hearing nothing is a
@@ -287,7 +289,8 @@ actor TranscriptionService {
         guard let onText else { return }
         let sessionID = job.sessionID
         let index = job.index
-        let reading = SegmentReading(primary: primary, secondary: secondary, localeUsed: locale)
+        let reading = SegmentReading(primary: primary, secondary: secondary,
+                                     localeUsed: locale, secondaryFailed: failed)
         await MainActor.run { onText(sessionID, index, reading) }
     }
 
